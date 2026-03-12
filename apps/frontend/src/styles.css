@@ -43,8 +43,12 @@ textarea {
   padding: 1rem;
 }
 
+p {
+  line-height: 1.7;
+}
+
 .page {
-  max-width: 1200px;
+  max-width: 1280px;
   margin: 0 auto;
   padding: 40px 20px 80px;
 }
@@ -59,9 +63,9 @@ textarea {
 }
 
 .hero p {
-  max-width: 800px;
+  max-width: 900px;
   color: #c6d2ea;
-  line-height: 1.6;
+  line-height: 1.7;
 }
 
 .badge {
@@ -129,23 +133,66 @@ textarea {
   color: #ffd47d;
 }
 
-.status-completed {
+.status-processing {
+  background: rgba(106, 157, 255, 0.18);
+  color: #bcd0ff;
+}
+
+.status-completed,
+.status-completed_with_fallback {
   background: rgba(39, 201, 126, 0.16);
   color: #8ef0bb;
 }
 
 .paymentBox,
-.report {
+.report,
+.reportSection,
+.debateCard,
+.evidenceRow {
   background: #0d1728;
   border-radius: 16px;
   border: 1px solid #263754;
   padding: 18px;
 }
 
-.columns {
+.columns,
+.metaGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 20px;
+}
+
+.reportSection h3,
+.reportSection h4,
+.paymentBox h3,
+.report h3 {
+  margin-top: 0;
+}
+
+.pillRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.45rem 0.8rem;
+  border-radius: 999px;
+  background: rgba(91, 140, 255, 0.12);
+  border: 1px solid rgba(91, 140, 255, 0.28);
+  color: #cadeff;
+}
+
+.debateList,
+.evidenceTable {
+  display: grid;
+  gap: 14px;
+}
+
+.muted {
+  color: #aab9d6;
 }
 
 .error {
@@ -154,7 +201,8 @@ textarea {
 
 @media (max-width: 900px) {
   .grid,
-  .columns {
+  .columns,
+  .metaGrid {
     grid-template-columns: 1fr;
   }
 }

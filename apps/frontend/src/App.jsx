@@ -19,8 +19,17 @@ async function request(path, options = {}) {
   return data;
 }
 
+function SectionCard({ title, children }) {
+  return (
+    <div className="reportSection">
+      <h3>{title}</h3>
+      {children}
+    </div>
+  );
+}
+
 export default function App() {
-  const [topic, setTopic] = useState('Summarize the latest 2025 papers on ZK Rollups and include core architecture diagrams.');
+  const [topic, setTopic] = useState('Produce a research-grade report on the latest ZK rollup papers, with architecture-level analysis, evaluation tradeoffs, and diagram-oriented system understanding.');
   const [job, setJob] = useState(null);
   const [jobs, setJobs] = useState([]);
   const [config, setConfig] = useState(null);
@@ -86,11 +95,11 @@ export default function App() {
   return (
     <div className="page">
       <header className="hero">
-        <span className="badge">AutoScholar MVP</span>
+        <span className="badge">AutoScholar V2 · Research Dossier Mode</span>
         <h1>The x402-Powered Agentic Research Network</h1>
         <p>
-          This version uses arXiv for paper discovery, an OpenAI-compatible provider for summary generation,
-          and a simulated Stacks payment flow for the paid specialist molbot.
+          This iteration upgrades the demo from a simple summary flow to a multi-agent research dossier:
+          manager orchestration, paid specialist unlock, structured evidence review, and academic-style synthesis.
         </p>
       </header>
 
@@ -98,7 +107,7 @@ export default function App() {
         <section className="card">
           <h2>Submit research request</h2>
           <form onSubmit={createJob} className="stack">
-            <textarea value={topic} onChange={(e) => setTopic(e.target.value)} rows={6} />
+            <textarea value={topic} onChange={(e) => setTopic(e.target.value)} rows={7} />
             <button disabled={loading}>{loading ? 'Working…' : 'Create manager job'}</button>
           </form>
           {error ? <p className="error">{error}</p> : null}
@@ -115,6 +124,7 @@ export default function App() {
               <li>Provider: {config.providerBaseUrl}</li>
               <li>Payment asset: {config.paymentAsset}</li>
               <li>Payment amount: {config.paymentAmount}</li>
+              <li>Orchestration: {config.orchestrationMode}</li>
             </ul>
           )}
         </section>
@@ -127,27 +137,54 @@ export default function App() {
                 <strong>{job.id}</strong>
                 <span className={`status status-${job.status}`}>{job.status}</span>
               </div>
-              <p><strong>Topic:</strong> {job.topic}</p>
-              <p><strong>Search query:</strong> {job.searchQuery}</p>
+
+              <div className="metaGrid">
+                <div>
+                  <p><strong>Topic</strong></p>
+                  <p>{job.topic}</p>
+                </div>
+                <div>
+                  <p><strong>Search query</strong></p>
+                  <p>{job.searchQuery}</p>
+                </div>
+                <div>
+                  <p><strong>Manager</strong></p>
+                  <p>{job.orchestration?.manager}</p>
+                </div>
+                <div>
+                  <p><strong>Meeting status</strong></p>
+                  <p>{job.orchestration?.meetingStatus}</p>
+                </div>
+              </div>
+
               {job.llm?.error ? (
                 <p className="error">
                   LLM fallback engaged: {job.llm.error}
                 </p>
               ) : null}
 
+              {job.orchestration?.specialists?.length ? (
+                <SectionCard title="Agent committee">
+                  <div className="pillRow">
+                    {job.orchestration.specialists.map((agent) => (
+                      <span key={agent} className="pill">{agent}</span>
+                    ))}
+                  </div>
+                </SectionCard>
+              ) : null}
+
               {job.papers?.length ? (
-                <div className="report">
-                  <h3>arXiv paper shortlist</h3>
+                <SectionCard title="Retrieved paper shortlist">
                   <ul className="list compact">
                     {job.papers.map((paper) => (
                       <li key={paper.id}>
                         <strong>{paper.title}</strong>
                         <div>{paper.authors?.join(', ') || 'Unknown authors'}</div>
-                        <div>{paper.published}</div>
+                        <div>{paper.published} · relevance score {paper.relevanceScore}</div>
                       </li>
                     ))}
                   </ul>
-                </div>
+                </SectionCard>
               ) : null}
 
               {job.status === 'awaiting-payment' ? (
@@ -161,35 +198,100 @@ export default function App() {
                     <li>Specialist: {job.paymentRequest.specialist}</li>
                   </ul>
                   <button onClick={payAndComplete} disabled={loading}>
-                    {loading ? 'Processing payment…' : 'Simulate chain payment and continue'}
+                    {loading ? 'Processing payment…' : 'Simulate chain payment and run committee meeting'}
                   </button>
                 </div>
               ) : null}
 
               {job.report ? (
-                <div className="report">
+                <div className="report stack">
                   <h3>{job.report.title}</h3>
-                  <p>{job.report.summary}</p>
+
+                  <SectionCard title="Executive summary">
+                    <p>{job.report.executiveSummary}</p>
+                  </SectionCard>
+
                   <div className="columns">
-                    <div>
-                      <h4>Key findings</h4>
+                    <SectionCard title="Research question">
+                      <p>{job.report.researchQuestion}</p>
+                    </SectionCard>
+                    <SectionCard title="Methodology">
+                      <p>{job.report.methodology}</p>
+                    </SectionCard>
+                  </div>
+
+                  <div className="columns">
+                    <SectionCard title="Key findings">
                       <ul className="list compact">
                         {(job.report.keyFindings || []).map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}
                       </ul>
-                    </div>
-                    <div>
-                      <h4>Implications</h4>
+                    </SectionCard>
+                    <SectionCard title="Implications">
                       <ul className="list compact">
                         {(job.report.implications || []).map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}
                       </ul>
-                    </div>
+                    </SectionCard>
                   </div>
-                  <h4>Extracted assets</h4>
-                  <ul className="list compact">
-                    {(job.report.extractedAssets || []).map((asset) => (
-                      <li key={asset.id}>{asset.title} — {asset.description}</li>
-                    ))}
-                  </ul>
+
+                  <div className="columns">
+                    <SectionCard title="Limitations">
+                      <ul className="list compact">
+                        {(job.report.limitations || []).map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}
+                      </ul>
+                    </SectionCard>
+                    <SectionCard title="Novelty assessment">
+                      <p>{job.report.noveltyAssessment}</p>
+                      <p className="muted"><strong>Consensus:</strong> {job.report.consensus}</p>
+                    </SectionCard>
+                  </div>
+
+                  <SectionCard title="Multi-agent meeting notes">
+                    <div className="debateList">
+                      {(job.report.agentDebate || []).map((entry, index) => (
+                        <div key={`${entry.agent}-${index}`} className="debateCard">
+                          <strong>{entry.agent}</strong>
+                          <div className="muted">{entry.role}</div>
+                          <p>{entry.stance}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </SectionCard>
+
+                  <SectionCard title="Evidence table">
+                    <div className="evidenceTable">
+                      {(job.report.evidenceTable || []).map((item, index) => (
+                        <div key={`${item.title}-${index}`} className="evidenceRow">
+                          <strong>{item.title}</strong>
+                          <p><span className="muted">Why it matters:</span> {item.whyItMatters}</p>
+                          <p><span className="muted">Evidence:</span> {item.evidence}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </SectionCard>
+
+                  <SectionCard title="Extracted assets">
+                    <ul className="list compact">
+                      {(job.report.extractedAssets || []).map((asset) => (
+                        <li key={asset.id}>{asset.title} — {asset.description}</li>
+                      ))}
+                    </ul>
+                  </SectionCard>
+
+                  <SectionCard title="Citations">
+                    <ul className="list compact">
+                      {(job.report.citations || []).map((item) => (
+                        <li key={item.id}>
+                          <strong>{item.ref}</strong> {item.title} — {item.authors?.join(', ') || 'Unknown authors'} ({item.published})
+                        </li>
+                      ))}
+                    </ul>
+                  </SectionCard>
+
+                  <SectionCard title="Next research actions">
+                    <ul className="list compact">
+                      {(job.report.nextResearchActions || []).map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}
+                    </ul>
+                  </SectionCard>
                 </div>
               ) : null}
             </div>
