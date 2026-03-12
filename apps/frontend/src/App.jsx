@@ -245,6 +245,23 @@ export default function App() {
                     </SectionCard>
                   </div>
 
+                  <div className="columns">
+                    <SectionCard title="Research quality">
+                      <ul className="list compact">
+                        <li>Evidence coverage: {job.report.quality?.evidenceCoverage}</li>
+                        <li>Synthesis mode: {job.report.quality?.synthesisMode}</li>
+                        <li>Confidence: {job.report.quality?.confidence}</li>
+                      </ul>
+                    </SectionCard>
+                    <SectionCard title="LLM runtime">
+                      <ul className="list compact">
+                        <li>Mode: {job.llm?.mode}</li>
+                        <li>Model: {job.llm?.model}</li>
+                        <li>Provider: {job.llm?.providerBaseUrl}</li>
+                      </ul>
+                    </SectionCard>
+                  </div>
+
                   <SectionCard title="Multi-agent meeting notes">
                     <div className="debateList">
                       {(job.report.agentDebate || []).map((entry, index) => (
