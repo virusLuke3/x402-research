@@ -678,7 +678,8 @@ function buildResearchReport(topic, researchMode, topicProfile, evidenceBundle, 
       contractPrincipal: evidenceBundle.paymentEvidence?.[0]?.sourceType === 'local-kb' ? 'ST2AUTOSCHOLARTESTNETTREASURY111111111111111.autoscholar-payments' : 'ST2AUTOSCHOLARTESTNETTREASURY111111111111111.autoscholar-payments',
       stateMachine: ['created', 'paid', 'consumed'],
       readOnlyFns: ['get-invoice', 'get-invoice-status', 'is-paid', 'is-consumed', 'has-replay-key'],
-      publicFns: ['create-invoice', 'pay-invoice', 'consume-payment']
+      publicFns: ['create-invoice', 'pay-invoice', 'consume-payment'],
+      backendVerificationModel: 'contract-state-aware'
     },
     paymentFlow: buildPaymentFlow(),
     extractedAssets,
@@ -850,7 +851,9 @@ app.post('/api/jobs/:id/pay', async (req, res) => {
         memo: verification.memo,
         verificationTarget: verification.verificationTarget,
         invoiceStatus: 'paid',
-        nextContractAction: 'consume-payment'
+        contractStateReader: 'get-invoice-status',
+        nextContractAction: 'consume-payment',
+        stateMachine: ['created', 'paid', 'consumed']
       };
     } else {
       paymentReceipt = {
@@ -866,7 +869,9 @@ app.post('/api/jobs/:id/pay', async (req, res) => {
         memo: job.paymentRequest.stacks.memo,
         verificationTarget: 'clarity-contract-call',
         invoiceStatus: 'paid',
-        nextContractAction: 'consume-payment'
+        contractStateReader: 'get-invoice-status',
+        nextContractAction: 'consume-payment',
+        stateMachine: ['created', 'paid', 'consumed']
       };
     }
 

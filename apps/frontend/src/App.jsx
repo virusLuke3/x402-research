@@ -269,6 +269,18 @@ export default function App() {
                         <li>States: {(job.report.paymentContract.stateMachine || []).join(' → ')}</li>
                         <li>Read-only functions: {(job.report.paymentContract.readOnlyFns || []).join(', ')}</li>
                         <li>Public functions: {(job.report.paymentContract.publicFns || []).join(', ')}</li>
+                        <li>Backend verification: {job.report.paymentContract.backendVerificationModel}</li>
+                      </ul>
+                    </SectionCard>
+                  ) : null}
+
+                  {job.paymentReceipt?.stateMachine ? (
+                    <SectionCard title="Payment state timeline">
+                      <ul className="list compact">
+                        <li>Current invoice status: {job.paymentReceipt?.invoiceStatus}</li>
+                        <li>Contract state reader: {job.paymentReceipt?.contractStateReader}</li>
+                        <li>Next contract action: {job.paymentReceipt?.nextContractAction}</li>
+                        <li>Timeline: {(job.paymentReceipt?.stateMachine || []).join(' → ')}</li>
                       </ul>
                     </SectionCard>
                   ) : null}
