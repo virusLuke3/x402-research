@@ -33,6 +33,7 @@ export default function App() {
   const [job, setJob] = useState(null);
   const [jobs, setJobs] = useState([]);
   const [config, setConfig] = useState(null);
+  const [contractState, setContractState] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -44,6 +45,11 @@ export default function App() {
   async function loadConfig() {
     const data = await request('/api/config');
     setConfig(data);
+  }
+
+  async function refreshContractState(jobId) {
+    const data = await request(`/api/jobs/${jobId}/contract-state`);
+    setContractState(data);
   }
 
   useEffect(() => {
@@ -61,6 +67,7 @@ export default function App() {
         body: JSON.stringify({ topic })
       });
       setJob(created);
+      await refreshContractState(created.id);
       await refreshJobs();
     } catch (err) {
       setError(err.message);
@@ -82,6 +89,7 @@ export default function App() {
         body: JSON.stringify({ paymentToken: DEMO_PAYMENT_TOKEN })
       });
       setJob(completed);
+      await refreshContractState(completed.id);
       await refreshJobs();
     } catch (err) {
       setError(err.message);
@@ -277,13 +285,14 @@ export default function App() {
                     </SectionCard>
                   ) : null}
 
-                  {job.paymentReceipt?.stateMachine ? (
+                  {(job.paymentReceipt?.stateMachine || contractState?.stateMachine) ? (
                     <SectionCard title="Payment state timeline">
                       <ul className="list compact">
-                        <li>Current invoice status: {job.paymentReceipt?.invoiceStatus}</li>
+                        <li>Current invoice status: {contractState?.invoiceStatus || job.paymentReceipt?.invoiceStatus}</li>
                         <li>Contract state reader: {job.paymentReceipt?.contractStateReader}</li>
-                        <li>Next contract action: {job.paymentReceipt?.nextContractAction}</li>
-                        <li>Timeline: {(job.paymentReceipt?.stateMachine || []).join(' → ')}</li>
+                        <li>Next contract action: {contractState?.nextAction || job.paymentReceipt?.nextContractAction}</li>
+                        <li>Adapter source: {contractState?.source}</li>
+                        <li>Timeline: {((contractState?.stateMachine || job.paymentReceipt?.stateMachine) || []).join(' → ')}</li>
                       </ul>
                     </SectionCard>
                   ) : null}

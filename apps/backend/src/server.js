@@ -8,7 +8,7 @@ import cors from 'cors';
 import { buildStacksPaymentRequest, verifyStacksPayment, STACKS_NETWORK, STACKS_API_BASE } from './stacks.js';
 import { buildX402Challenge, buildX402Headers } from './x402.js';
 import { buildClarityPaymentSpec, buildClarityVerificationPlan } from './clarity-payment.js';
-import { readContractInvoiceState } from './contract-state.js';
+import { readContractInvoiceState, seedContractInvoiceState, markContractInvoicePaid } from './contract-state.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -792,6 +792,16 @@ app.post('/api/research', async (req, res) => {
       report: null
     };
 
+    seedContractInvoiceState({
+      jobId: id,
+      invoiceStatus: 'created',
+      paymentRequest: job.paymentRequest
+    });
+    job.contractState = await readContractInvoiceState({
+      jobId: id,
+      paymentRequest: job.paymentRequest
+    });
+
     jobs.set(id, job);
     return res.status(202).json(job);
   } catch (error) {
@@ -910,7 +920,7 @@ app.post('/api/jobs/:id/pay', async (req, res) => {
     job.orchestration.meetingStatus = 'concluded';
     job.paidAt = new Date().toISOString();
     job.paymentReceipt = paymentReceipt;
-    job.contractState = await readContractInvoiceState({
+    job.contractState = await markContractInvoicePaid({
       jobId: job.id,
       paymentRequest: job.paymentRequest,
       paymentReceipt
@@ -940,6 +950,21 @@ app.get('/api/jobs/:id', (req, res) => {
     return res.status(404).json({ error: 'job not found' });
   }
   return res.json(job);
+});
+
+app.get('/api/jobs/:id/contract-state', async (req, res) => {
+  const job = jobs.get(req.params.id);
+  if (!job) {
+    return res.status(404).json({ error: 'job not found' });
+  }
+
+  const state = await readContractInvoiceState({
+    jobId: job.id,
+    paymentRequest: job.paymentRequest,
+    paymentReceipt: job.paymentReceipt || null
+  });
+
+  return res.json(state);
 });
 
 const server = app.listen(PORT, () => {

@@ -1,17 +1,33 @@
+const inMemoryInvoiceState = new Map();
+
+export function seedContractInvoiceState({ jobId, invoiceStatus = 'created', paymentRequest, paymentReceipt = null }) {
+  inMemoryInvoiceState.set(jobId, {
+    jobId,
+    source: 'adapter-simulated',
+    contractPrincipal: paymentRequest?.clarity?.contractPrincipal || paymentRequest?.stacks?.contract || null,
+    invoiceStatus,
+    paid: invoiceStatus === 'paid' || invoiceStatus === 'consumed',
+    consumed: invoiceStatus === 'consumed',
+    readOnlyFns: ['get-invoice', 'get-invoice-status', 'is-paid', 'is-consumed', 'has-replay-key'],
+    nextAction: invoiceStatus === 'created' ? 'pay-invoice' : invoiceStatus === 'paid' ? 'consume-payment' : null,
+    stateMachine: ['created', 'paid', 'consumed'],
+    paymentReceipt,
+    updatedAt: new Date().toISOString()
+  });
+}
+
 export async function readContractInvoiceState({ jobId, paymentRequest, paymentReceipt }) {
+  const existing = inMemoryInvoiceState.get(jobId);
+  if (existing) {
+    return existing;
+  }
+
   const stateMachine = ['created', 'paid', 'consumed'];
-
-  // V7.6 adapter scaffold.
-  // Future implementation targets:
-  // 1. Clarinet console/SDK for local contract simulation
-  // 2. Hiro API / read-only contract calls on testnet
-  // 3. Mapping contract state to backend unlock state
-
   const inferredStatus = paymentReceipt?.invoiceStatus || 'created';
   const consumed = inferredStatus === 'consumed';
   const paid = inferredStatus === 'paid' || consumed;
 
-  return {
+  const state = {
     source: 'adapter-simulated',
     contractPrincipal: paymentRequest?.clarity?.contractPrincipal || paymentRequest?.stacks?.contract || null,
     jobId,
@@ -20,6 +36,30 @@ export async function readContractInvoiceState({ jobId, paymentRequest, paymentR
     paid,
     consumed,
     readOnlyFns: ['get-invoice', 'get-invoice-status', 'is-paid', 'is-consumed', 'has-replay-key'],
-    nextAction: consumed ? null : paid ? 'consume-payment' : 'pay-invoice'
+    nextAction: consumed ? null : paid ? 'consume-payment' : 'pay-invoice',
+    updatedAt: new Date().toISOString()
   };
+
+  inMemoryInvoiceState.set(jobId, state);
+  return state;
+}
+
+export async function markContractInvoicePaid({ jobId, paymentRequest, paymentReceipt }) {
+  seedContractInvoiceState({
+    jobId,
+    invoiceStatus: 'paid',
+    paymentRequest,
+    paymentReceipt
+  });
+  return inMemoryInvoiceState.get(jobId);
+}
+
+export async function markContractInvoiceConsumed({ jobId, paymentRequest, paymentReceipt }) {
+  seedContractInvoiceState({
+    jobId,
+    invoiceStatus: 'consumed',
+    paymentRequest,
+    paymentReceipt
+  });
+  return inMemoryInvoiceState.get(jobId);
 }
