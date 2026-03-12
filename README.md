@@ -43,7 +43,7 @@ Copy `.env.example` to `.env` and fill in values.
 Current local setup uses:
 - TuZi OpenAI-compatible API at `https://api.tu-zi.com/v1`
 - model `gpt-5.4`
-- paper source `arXiv`
+- evidence source `local x402/stacks knowledge base + arXiv`
 - simulated x402 challenge + Stacks-style chain payment
 
 ### Run

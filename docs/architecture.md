@@ -6,7 +6,7 @@ AutoScholar currently uses a hybrid implementation oriented around x402 protocol
 
 - **Frontend**: React + Vite dashboard
 - **Backend**: Express manager service
-- **Paper discovery**: arXiv API
+- **Evidence discovery**: mixed retrieval (local x402/Stacks knowledge base + arXiv API)
 - **LLM summarization**: TuZi OpenAI-compatible endpoint via Python helper
 - **Payment**: simulated x402 / Stacks-style payment receipt
 
@@ -26,3 +26,4 @@ This keeps the hackathon demo moving while preserving the intended user flow.
 2. split specialist molbots into separate services
 3. move from simulated payment receipts to Stacks testnet transaction verification
 4. add true diagram extraction from PDF sources
+5. expand x402 / Stacks local knowledge base into first-class protocol documentation retrieval

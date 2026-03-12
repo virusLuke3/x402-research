@@ -95,12 +95,12 @@ export default function App() {
   return (
     <div className="page">
       <header className="hero">
-        <span className="badge">AutoScholar V4 · x402 + Stacks Intelligence Console</span>
+        <span className="badge">AutoScholar V5 · x402 + Stacks Evidence Engine</span>
         <h1>The x402-Powered Agentic Research Network</h1>
         <p>
-          This iteration reframes the project around x402 protocol design and Stacks-native settlement:
-          the demo now presents a technical intelligence console for agent payments, Stacks asset flow,
-          committee review, and protocol-oriented research synthesis.
+          This iteration upgrades the project into an x402 / Stacks evidence engine:
+          local protocol knowledge, mixed retrieval, evidence-class labeling, committee review,
+          and protocol-oriented research synthesis for agent payments.
         </p>
       </header>
 
@@ -262,6 +262,9 @@ export default function App() {
                         <li>Evidence coverage: {job.report.quality?.evidenceCoverage}</li>
                         <li>Synthesis mode: {job.report.quality?.synthesisMode}</li>
                         <li>Confidence: {job.report.quality?.confidence}</li>
+                        <li>Protocol-core: {job.report.quality?.evidenceStats?.['protocol-core'] ?? 0}</li>
+                        <li>Supporting: {job.report.quality?.evidenceStats?.supporting ?? 0}</li>
+                        <li>Off-topic: {job.report.quality?.evidenceStats?.['off-topic'] ?? 0}</li>
                       </ul>
                     </SectionCard>
                     <SectionCard title="LLM runtime">
@@ -291,6 +294,8 @@ export default function App() {
                         <div key={`${item.title}-${index}`} className="evidenceRow">
                           <strong>{item.title}</strong>
                           <p><span className="muted">Why it matters:</span> {item.whyItMatters}</p>
+                          <p><span className="muted">Evidence class:</span> {item.protocolLens}</p>
+                          <p><span className="muted">Source type:</span> {item.sourceType}</p>
                           <p><span className="muted">Evidence:</span> {item.evidence}</p>
                         </div>
                       ))}

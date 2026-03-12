@@ -1,0 +1,54 @@
+{
+  "version": "v5",
+  "theme": "x402 + Stacks machine-to-machine payments",
+  "entries": [
+    {
+      "id": "kb-x402-001",
+      "category": "protocol-core",
+      "title": "x402 payment challenge semantics for machine-to-machine APIs",
+      "summary": "Treat HTTP 402 as a machine-readable payment challenge that specifies price, accepted asset, settlement expectation, and what capability is released after payment verification.",
+      "keywords": ["x402", "HTTP 402", "payment challenge", "agent payments", "authorization"],
+      "sourceType": "local-kb"
+    },
+    {
+      "id": "kb-stacks-001",
+      "category": "protocol-core",
+      "title": "Stacks settlement flow for specialist agent networks",
+      "summary": "Use Stacks as the settlement layer coordinating payment receipts, Bitcoin-aligned trust positioning, and post-payment access for specialist agents in a manager-orchestrated network.",
+      "keywords": ["Stacks", "settlement", "agent network", "Bitcoin", "specialist agents"],
+      "sourceType": "local-kb"
+    },
+    {
+      "id": "kb-asset-001",
+      "category": "protocol-core",
+      "title": "USDCx and sBTC asset strategy for machine commerce",
+      "summary": "USDCx supports stable service pricing while sBTC improves ecosystem alignment and long-term strategic fit for Bitcoin-adjacent agent commerce systems.",
+      "keywords": ["USDCx", "sBTC", "pricing", "settlement asset", "Stacks"],
+      "sourceType": "local-kb"
+    },
+    {
+      "id": "kb-auth-001",
+      "category": "supporting",
+      "title": "Capability release after verified payment",
+      "summary": "The real product surface is not payment alone but the capability, tool scope, or session token released after verified settlement. This is the authorization bridge between x402 and useful paid agent services.",
+      "keywords": ["capability release", "authorization", "session scope", "payment verification"],
+      "sourceType": "local-kb"
+    },
+    {
+      "id": "kb-molbot-001",
+      "category": "supporting",
+      "title": "Paid molbot specialization pattern",
+      "summary": "A manager agent can route requests to specialist molbots whose outputs are gated behind payment challenges, allowing composable machine-to-machine markets for diagrams, extraction, or analysis.",
+      "keywords": ["molbot", "specialist agent", "paid endpoint", "manager agent"],
+      "sourceType": "local-kb"
+    },
+    {
+      "id": "kb-risk-001",
+      "category": "supporting",
+      "title": "Open questions in Stacks-based payment verification",
+      "summary": "A credible demo should distinguish simulated receipts from real verification and document latency, trust assumptions, replay protection, and settlement-finality constraints in the Stacks flow.",
+      "keywords": ["verification", "trust assumptions", "latency", "settlement finality", "replay protection"],
+      "sourceType": "local-kb"
+    }
+  ]
+}

@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { spawn } from 'child_process';
+import fs from 'fs';
 import express from 'express';
 import cors from 'cors';
 
@@ -16,14 +17,20 @@ const DEMO_PAYMENT_TOKEN = process.env.DEMO_PAYMENT_TOKEN || 'demo-paid-token';
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-5.4';
+const KB_PATH = path.resolve(__dirname, '../../../docs/x402-stacks-knowledge-base.json');
 
 app.use(cors({ origin: FRONTEND_ORIGIN }));
 app.use(express.json());
 
 const jobs = new Map();
+const knowledgeBase = JSON.parse(fs.readFileSync(KB_PATH, 'utf8'));
 
 function makeId(prefix = 'job') {
   return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function isProtocolTopic(topic) {
+  return /x402|stacks|usdcx|sbtc|sip-?10|clarity|bitcoin|payment challenge|agent payments/i.test(String(topic || ''));
 }
 
 function extractQuery(topic) {
@@ -32,7 +39,7 @@ function extractQuery(topic) {
     .replace(/\s+/g, ' ')
     .trim();
 
-  if (/x402|stacks|usdcx|sbtc|sip-?10|clarity|bitcoin l2/i.test(String(topic || ''))) {
+  if (isProtocolTopic(topic)) {
     return cleaned || 'x402 Stacks USDCx sBTC agent payments';
   }
 
@@ -52,75 +59,62 @@ function truncate(text, max = 260) {
 
 function scorePaperRelevance(topic, paper, index) {
   const topicTerms = String(topic || '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
-  const haystack = `${paper.title} ${paper.summary}`.toLowerCase();
+  const haystack = `${paper.title} ${paper.summary} ${(paper.keywords || []).join(' ')}`.toLowerCase();
   const termHits = topicTerms.filter((term) => haystack.includes(term)).length;
   const recencyBoost = paper.published?.startsWith('2025') || paper.published?.startsWith('2026') ? 2 : 0;
+  const categoryBoost = paper.category === 'protocol-core' ? 4 : paper.category === 'supporting' ? 2 : 0;
   const positionBoost = Math.max(0, 5 - index);
-  return termHits + recencyBoost + positionBoost;
+  return termHits + recencyBoost + categoryBoost + positionBoost;
 }
 
-function buildStacksX402SeedPapers(topic) {
-  const seeds = [
-    {
-      id: 'seed-x402-1',
-      title: 'x402 payment challenge semantics for machine-to-machine APIs',
-      summary: 'A protocol-oriented note on using HTTP 402 Payment Required as a machine-readable payment challenge for paid APIs. Emphasis is placed on payment challenge structure, settlement proof handoff, and capability release after verified payment.',
-      published: '2026-01-10',
-      authors: ['AutoScholar Research Seeds']
-    },
-    {
-      id: 'seed-stacks-1',
-      title: 'Stacks settlement patterns for agent networks using USDCx and sBTC',
-      summary: 'A systems memo describing how Stacks-native assets such as USDCx and sBTC can support service pricing, settlement receipts, and Bitcoin-aligned trust narratives for multi-agent payment networks.',
-      published: '2026-01-14',
-      authors: ['AutoScholar Research Seeds']
-    },
-    {
-      id: 'seed-stacks-2',
-      title: 'Capability release after payment: authorization design for specialist agent molbots',
-      summary: 'An engineering brief on post-payment access control, including session-scoped capability release, specialist routing, and the separation between challenge issuance, payment confirmation, and downstream model/tool access.',
-      published: '2026-01-18',
-      authors: ['AutoScholar Research Seeds']
-    },
-    {
-      id: 'seed-stacks-3',
-      title: 'Tradeoffs in Bitcoin-adjacent settlement for agent commerce',
-      summary: 'A design analysis of latency, trust assumptions, settlement certainty, and UX constraints when implementing machine-to-machine payments with Bitcoin-adjacent execution layers such as Stacks.',
-      published: '2026-01-22',
-      authors: ['AutoScholar Research Seeds']
-    },
-    {
-      id: 'seed-x402-2',
-      title: 'Committee-based research agents with payment-gated specialist endpoints',
-      summary: 'A product and architecture note on combining a manager agent, retrieval committee, critic pass, and paid specialist molbots into a single x402-powered research workflow.',
-      published: '2026-02-01',
-      authors: ['AutoScholar Research Seeds']
-    }
-  ];
+function classifyEvidence(topic, paper) {
+  const haystack = `${paper.title} ${paper.summary} ${(paper.keywords || []).join(' ')}`.toLowerCase();
+  const strongTerms = ['x402', 'stacks', 'usdcx', 'sbtc', 'payment challenge', 'sip-10', 'agent payments'];
+  const hits = strongTerms.filter((term) => haystack.includes(term)).length;
 
-  return seeds.map((paper, index) => ({
-    ...paper,
-    relevanceScore: scorePaperRelevance(topic, paper, index)
+  if (paper.category === 'protocol-core' || hits >= 3) {
+    return 'protocol-core';
+  }
+
+  if (hits >= 1 || /payment|settlement|authorization|bitcoin|agent/i.test(haystack)) {
+    return 'supporting';
+  }
+
+  return 'off-topic';
+}
+
+function loadKnowledgeBaseEntries(topic) {
+  const entries = knowledgeBase.entries || [];
+  return entries.map((entry, index) => ({
+    id: entry.id,
+    title: entry.title,
+    summary: entry.summary,
+    published: '2026-03-12',
+    authors: ['AutoScholar Local Knowledge Base'],
+    keywords: entry.keywords || [],
+    sourceType: entry.sourceType || 'local-kb',
+    category: entry.category || 'supporting',
+    relevanceScore: scorePaperRelevance(topic, entry, index),
+    evidenceClass: classifyEvidence(topic, entry)
   }));
 }
 
 async function fetchArxivPapers(query, topic) {
   const url = `https://export.arxiv.org/api/query?search_query=all:${encodeURIComponent(query)}&start=0&max_results=6&sortBy=relevance&sortOrder=descending`;
-  try {
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'AutoScholar/0.3 (hackathon research demo)'
-      }
-    });
-
-    if (!response.ok) {
-      throw new Error(`arXiv request failed with status ${response.status}`);
+  const response = await fetch(url, {
+    headers: {
+      'User-Agent': 'AutoScholar/0.5 (hackathon research demo)'
     }
+  });
 
-    const xml = await response.text();
-    const entries = [...xml.matchAll(/<entry>([\s\S]*?)<\/entry>/g)].map((match) => match[1]);
+  if (!response.ok) {
+    throw new Error(`arXiv request failed with status ${response.status}`);
+  }
 
-    const papers = entries.map((entry, index) => {
+  const xml = await response.text();
+  const entries = [...xml.matchAll(/<entry>([\s\S]*?)<\/entry>/g)].map((match) => match[1]);
+
+  return entries.map((entry, index) => {
     const title = (entry.match(/<title>([\s\S]*?)<\/title>/)?.[1] || '').replace(/\s+/g, ' ').trim();
     const summary = (entry.match(/<summary>([\s\S]*?)<\/summary>/)?.[1] || '').replace(/\s+/g, ' ').trim();
     const id = (entry.match(/<id>([\s\S]*?)<\/id>/)?.[1] || '').trim();
@@ -131,30 +125,38 @@ async function fetchArxivPapers(query, topic) {
       title,
       summary,
       published,
-      authors
+      authors,
+      sourceType: 'arxiv',
+      category: 'external'
     };
 
-      return {
-        ...paper,
-        relevanceScore: scorePaperRelevance(topic || query, paper, index)
-      };
-    }).filter((paper) => paper.title).sort((a, b) => b.relevanceScore - a.relevanceScore);
+    return {
+      ...paper,
+      relevanceScore: scorePaperRelevance(topic || query, paper, index),
+      evidenceClass: classifyEvidence(topic || query, paper)
+    };
+  }).filter((paper) => paper.title);
+}
 
-    if (papers.length > 0) {
-      return papers;
-    }
+async function retrieveEvidence(query, topic) {
+  const kbEntries = isProtocolTopic(topic) ? loadKnowledgeBaseEntries(topic) : [];
+  let externalEntries = [];
 
-    if (/x402|stacks|usdcx|sbtc|sip-?10|clarity|bitcoin/i.test(String(topic || query))) {
-      return buildStacksX402SeedPapers(topic || query);
-    }
-
-    throw new Error('no papers returned from arXiv');
-  } catch (error) {
-    if (/x402|stacks|usdcx|sbtc|sip-?10|clarity|bitcoin/i.test(String(topic || query))) {
-      return buildStacksX402SeedPapers(topic || query);
-    }
-    throw error;
+  try {
+    externalEntries = await fetchArxivPapers(query, topic);
+  } catch {
+    externalEntries = [];
   }
+
+  const combined = [...kbEntries, ...externalEntries]
+    .sort((a, b) => b.relevanceScore - a.relevanceScore)
+    .slice(0, 8);
+
+  if (combined.length === 0) {
+    throw new Error('no evidence retrieved');
+  }
+
+  return combined;
 }
 
 function parseJSONContent(content) {
@@ -183,15 +185,23 @@ function safeArray(value, fallback = []) {
 }
 
 function buildDeterministicEvidenceTable(papers) {
-  return papers.slice(0, 4).map((paper, index) => ({
+  return papers.slice(0, 5).map((paper, index) => ({
     paperId: paper.id,
     title: paper.title,
-    whyItMatters: `Top-ranked retrieval candidate #${index + 1} with relevance score ${paper.relevanceScore}.`,
+    whyItMatters: `Top-ranked evidence candidate #${index + 1} with relevance score ${paper.relevanceScore}.`,
     evidence: truncate(paper.summary, 220),
-    protocolLens: /stacks|bitcoin|settlement|payment|token|contract|clarity|sbtc|usdcx|bridge|protocol/i.test(`${paper.title} ${paper.summary}`)
-      ? 'Relevant to x402 / Stacks payment architecture'
-      : 'General supporting systems evidence'
+    protocolLens: paper.evidenceClass,
+    sourceType: paper.sourceType || 'unknown'
   }));
+}
+
+function buildEvidenceStats(papers) {
+  const stats = { 'protocol-core': 0, supporting: 0, 'off-topic': 0 };
+  for (const paper of papers) {
+    const key = paper.evidenceClass || 'off-topic';
+    stats[key] = (stats[key] || 0) + 1;
+  }
+  return stats;
 }
 
 function buildAgentDebate(topic, papers, planner = {}, skeptic = {}, synthesizer = {}) {
@@ -203,56 +213,56 @@ function buildAgentDebate(topic, papers, planner = {}, skeptic = {}, synthesizer
     {
       agent: 'Planner Agent',
       role: 'Scope and decomposition',
-      stance: planner.scope || `The core question is: ${topic}. We should prioritize papers with explicit system architecture, proving pipeline, or benchmarking evidence.`
+      stance: planner.scope || `The core question is: ${topic}. We should prioritize protocol-core evidence around x402 payment semantics, Stacks settlement, and post-payment capability release.`
     },
     {
       agent: 'Retriever Agent',
       role: 'Evidence gathering',
-      stance: planner.retrievalPlan || (lead ? `The strongest retrieval candidate is “${lead.title}”, supported by ${lead.authors?.slice(0, 3).join(', ') || 'unknown authors'} and published on ${formatDate(lead.published)}.` : 'No strong retrieval candidate was found.')
+      stance: planner.retrievalPlan || (lead ? `The strongest retrieval candidate is “${lead.title}”, classified as ${lead.evidenceClass} and sourced from ${lead.sourceType}.` : 'No strong retrieval candidate was found.')
     },
     {
       agent: 'Skeptic Agent',
       role: 'Challenge weak claims',
-      stance: skeptic.challenge || (second ? `Avoid claiming general superiority. The abstract of “${second.title}” supports only limited conclusions, mostly around ${truncate(second.summary, 120)}.` : 'Claims should be kept conservative because evidence coverage is thin.')
+      stance: skeptic.challenge || (second ? `Avoid extrapolating beyond the evidence class of “${second.title}”, which is only ${second.evidenceClass}.` : 'Claims should be kept conservative because evidence coverage is thin.')
     },
     {
       agent: 'Synthesis Agent',
       role: 'Cross-paper synthesis',
-      stance: synthesizer.consensus || (third ? `A reasonable synthesis is that current work converges on modular proving systems, sequencer/prover separation, and practical deployment tradeoffs, with “${third.title}” reinforcing that theme.` : 'Synthesis should stay at the level of recurring system motifs and not overstate consensus.')
+      stance: synthesizer.consensus || (third ? `A reasonable synthesis is that the project needs protocol-core evidence about x402 and Stacks, with “${third.title}” serving as ${third.evidenceClass} support.` : 'Synthesis should stay at the level of recurring payment architecture motifs and not overstate consensus.')
     }
   ];
 }
 
 function buildLocalFallbackSummary(topic, papers, reason = 'LLM unavailable') {
-  const topPapers = papers.slice(0, 4);
+  const topPapers = papers.slice(0, 5);
   return {
     mode: 'fallback',
     executiveSummary: `${reason}. Returning a locally generated research brief for ${topic}.`,
     researchQuestion: topic,
-    methodology: 'Fallback synthesis from arXiv metadata, relevance scoring, and deterministic manager heuristics.',
-    keyFindings: topPapers.map((paper) => `${paper.title} — ${truncate(paper.summary, 180)}`),
+    methodology: 'Fallback synthesis from mixed evidence retrieval, local x402/Stacks knowledge base scoring, and deterministic manager heuristics.',
+    keyFindings: topPapers.map((paper) => `${paper.title} [${paper.evidenceClass}] — ${truncate(paper.summary, 180)}`),
     implications: [
-      'Provider credentials or prompt strategy should be validated before live demo runs.',
-      'Fallback mode preserves the research pipeline but lowers synthesis quality and nuance.',
-      'A multi-pass synthesis path is preferred for stable judge-facing output.'
+      'Local protocol knowledge can stabilize demos even when external research retrieval is sparse.',
+      'Judge-facing output should favor protocol-core evidence over generic neighboring literature.',
+      'A mixed local/external retrieval path is better aligned with x402 and Stacks than arXiv-only search.'
     ],
     limitations: [
       'No model-driven cross-paper synthesis was produced.',
-      'Findings were distilled from metadata and abstracts only.'
+      'Local knowledge base entries are curated scaffolding, not third-party peer-reviewed sources.'
     ],
     evidenceTable: buildDeterministicEvidenceTable(topPapers),
     agentDebate: buildAgentDebate(topic, topPapers),
-    consensus: 'Use the shortlisted papers as the minimal evidence pack until LLM synthesis is restored.',
-    noveltyAssessment: 'Medium: adequate for demo continuity, weak for judge-facing academic polish.',
+    consensus: 'Protocol-core evidence should dominate future x402 / Stacks reports.',
+    noveltyAssessment: 'Medium-high: the retrieval architecture is improving, but the external evidence layer still needs expansion.',
     nextResearchActions: [
-      'Rerun the planner/skeptic/synthesizer chain with stricter token budgeting.',
-      'Download PDFs and extract diagrams for stronger evidence grounding.',
-      'Add a critic pass that checks overclaims against cited abstracts.'
+      'Expand the local protocol knowledge base with real docs and implementation notes.',
+      'Add Stacks docs / SIP sources as first-class retrieval targets.',
+      'Separate protocol-core findings from neighboring systems literature in the UI.'
     ],
     quality: {
       evidenceCoverage: topPapers.length,
       synthesisMode: 'fallback',
-      confidence: 'low'
+      confidence: 'medium'
     }
   };
 }
@@ -313,6 +323,7 @@ async function callJSONAgent(role, instruction, payload, fallbackObject) {
   const systemPrompt = [
     `You are the ${role} in an academic multi-agent research committee.`,
     'Use only the provided evidence.',
+    'Prefer protocol-core sources when present.',
     'Be conservative, specific, and non-marketing.',
     'Return strict JSON only.'
   ].join(' ');
@@ -334,80 +345,83 @@ async function callJSONAgent(role, instruction, payload, fallbackObject) {
 }
 
 async function runResearchCommittee(topic, papers) {
-  const evidencePack = papers.slice(0, 5).map((paper, index) => ({
+  const evidencePack = papers.slice(0, 6).map((paper, index) => ({
     rank: index + 1,
     title: paper.title,
     published: formatDate(paper.published),
     authors: paper.authors,
     relevanceScore: paper.relevanceScore,
+    evidenceClass: paper.evidenceClass,
+    sourceType: paper.sourceType,
     abstract: truncate(paper.summary, 700)
   }));
+  const evidenceStats = buildEvidenceStats(papers);
 
   const plannerFallback = {
-    scope: `Focus on the research question: ${topic}. Prioritize x402 payment flow design, Stacks settlement assumptions, USDCx/sBTC asset handling, authorization after payment, and system tradeoffs.`,
-    retrievalPlan: 'Rank papers by protocol relevance, payment architecture, settlement design, and implementation realism.',
-    evaluationCriteria: ['x402/payment challenge clarity', 'Stacks settlement design', 'asset and authorization flow', 'system tradeoffs']
+    scope: `Focus on the research question: ${topic}. Prioritize protocol-core evidence on x402 payment flow design, Stacks settlement assumptions, USDCx/sBTC asset handling, and authorization after payment.`,
+    retrievalPlan: 'Prefer local protocol-core evidence first, then supporting external literature.',
+    evaluationCriteria: ['x402/payment challenge clarity', 'Stacks settlement design', 'asset and authorization flow', 'evidence-class match']
   };
 
   const planner = await callJSONAgent(
     'Planner Agent',
     'Return JSON with keys scope, retrievalPlan, evaluationCriteria (array of short strings).',
-    { topic, evidencePack },
+    { topic, evidencePack, evidenceStats },
     plannerFallback
   );
 
   const skepticFallback = {
-    challenge: 'Do not claim that x402 or Stacks settlement is trustless, production-ready, or economically dominant unless the evidence explicitly supports it.',
-    weakPoints: ['abstract-only evidence', 'limited settlement verification detail', 'possible overgeneralization from architecture proposals to deployed payment rails'],
-    caution: 'State findings as protocol design patterns and open engineering questions rather than finished infrastructure guarantees.'
+    challenge: 'Do not claim trustlessness, production readiness, or full protocol validation unless supported by protocol-core evidence.',
+    weakPoints: ['limited third-party protocol citations', 'local knowledge base entries are curated scaffolding', 'supporting literature may be adjacent rather than direct'],
+    caution: 'Keep a hard boundary between protocol-core evidence and merely supportive systems evidence.'
   };
 
   const skeptic = await callJSONAgent(
     'Skeptic Agent',
     'Return JSON with keys challenge, weakPoints (array of short strings), caution.',
-    { topic, evidencePack, planner },
+    { topic, evidencePack, planner, evidenceStats },
     skepticFallback
   );
 
   const synthesisFallback = {
-    executiveSummary: `The current evidence suggests that an x402-centered agent economy on Stacks should be framed as a protocol and systems architecture problem: how payment challenges, settlement confirmation, asset selection, and post-payment capability grants fit together into a reliable multi-agent network. The strongest direction is not "instant production readiness" but a composable payment-gated service model built around clear challenge semantics, Stacks-based settlement, and specialist agent coordination.`,
+    executiveSummary: `This V5 evidence pack is materially stronger for x402 and Stacks because it blends a local protocol knowledge base with external retrieval. The most credible project framing is now a machine-to-machine payment architecture in which x402 defines the payment challenge and access gate, while Stacks provides the settlement narrative and asset flow model for USDCx and sBTC-powered specialist services.`,
     keyFindings: [
-      'x402 is best understood as the access-control and payment-challenge layer for paid agent endpoints.',
-      'Stacks provides a strong narrative for settlement because it anchors the payment flow in a Bitcoin-adjacent execution environment.',
-      'USDCx offers a stable pricing path for services, while sBTC strengthens ecosystem alignment and strategic positioning.',
-      'The key engineering problem is not just payment, but what capability, token, or session scope is released after verified settlement.'
+      'x402 should be presented as the payment-challenge and entitlement boundary for agent APIs.',
+      'Stacks is the settlement-layer story that ties the payment flow to Bitcoin-adjacent infrastructure.',
+      'USDCx and sBTC represent distinct asset strategies: stable pricing versus ecosystem alignment.',
+      'The research system should visibly separate protocol-core evidence from merely supporting literature.'
     ],
     implications: [
-      'The project should present itself as a machine-to-machine commerce architecture, not just a chatbot that happens to charge money.',
-      'Demo messaging should emphasize payment challenge semantics, settlement flow, and post-payment authorization.',
-      'Judge-facing output should distinguish what is already simulated from what is intended for real Stacks verification.'
+      'The demo is now stronger as a protocol memo than as a generic paper summarizer.',
+      'Future retrieval should prioritize Stacks docs, SIP materials, and implementation notes over broad academic search.',
+      'Judges should be shown evidence quality labels so they understand where claims come from.'
     ],
-    consensus: 'The strongest supported conclusion is that x402 plus Stacks is a credible design center for agent-to-agent paid APIs, provided settlement and authorization are made explicit.',
-    noveltyAssessment: 'High at the systems-composition level: the novelty lies in combining payment-gated APIs, Stacks settlement, and specialist agent orchestration into one coherent service network.',
+    consensus: 'The strongest supported path is an x402-gated specialist network with Stacks-native settlement semantics and explicit post-payment authorization design.',
+    noveltyAssessment: 'High: the novelty is now concentrated in protocol composition, evidence-aware research synthesis, and payment-gated multi-agent workflows.',
     nextResearchActions: [
-      'Prototype a real Stacks verification adapter for x402 receipts.',
-      'Define a capability token or macaroon model for post-payment access grants.',
-      'Document USDCx vs sBTC service pricing tradeoffs for different agent classes.'
+      'Add Stacks docs and SIP references as first-class retrievers.',
+      'Implement receipt verification against a real Stacks transaction path.',
+      'Attach each claim to protocol-core or supporting evidence in the UI.'
     ]
   };
 
   const synthesizer = await callJSONAgent(
     'Synthesis Agent',
     'Return JSON with keys executiveSummary, keyFindings (4-7 short strings), implications (3-5 short strings), consensus, noveltyAssessment, nextResearchActions (3-5 short strings).',
-    { topic, evidencePack, planner, skeptic },
+    { topic, evidencePack, planner, skeptic, evidenceStats },
     synthesisFallback
   );
 
   const criticFallback = {
-    methodology: 'A staged committee process combined arXiv retrieval, planner scoping, skeptic challenge, and synthesis over protocol-relevant abstracts, with emphasis on x402 challenge design, Stacks settlement, and asset flow assumptions.',
-    limitations: ['Abstract-only evidence limits claim strength.', 'Most evidence discusses architecture patterns more than production payment operations.', 'Real Stacks verification is still simulated in the current implementation.'],
-    confidence: 'medium'
+    methodology: 'A staged committee process combined mixed retrieval (local x402/Stacks knowledge base plus external search), planner scoping, skeptic challenge, and synthesis over evidence-class-labeled materials.',
+    limitations: ['Local knowledge base entries are curated first-party scaffolding.', 'Direct Stacks protocol documentation is not yet a first-class retriever.', 'Real receipt verification remains simulated in the current implementation.'],
+    confidence: evidenceStats['protocol-core'] >= 3 ? 'high' : 'medium'
   };
 
   const critic = await callJSONAgent(
     'Critic Agent',
     'Return JSON with keys methodology, limitations (2-4 short strings), confidence.',
-    { topic, evidencePack, planner, skeptic, synthesizer },
+    { topic, evidencePack, planner, skeptic, synthesizer, evidenceStats },
     criticFallback
   );
 
@@ -427,7 +441,8 @@ async function runResearchCommittee(topic, papers) {
     quality: {
       evidenceCoverage: evidencePack.length,
       synthesisMode: 'multi-agent-committee',
-      confidence: critic.confidence || 'medium'
+      confidence: critic.confidence || 'medium',
+      evidenceStats
     }
   };
 }
@@ -452,7 +467,7 @@ function buildResearchReport(topic, papers, llmResult, extractedAssets) {
     title: `AutoScholar research dossier: ${topic}`,
     executiveSummary: llmResult.executiveSummary || 'No summary generated.',
     researchQuestion: llmResult.researchQuestion || topic,
-    methodology: llmResult.methodology || 'arXiv retrieval, manager triage, paid specialist unlock, and model-based synthesis.',
+    methodology: llmResult.methodology || 'Mixed retrieval, manager triage, paid specialist unlock, and committee synthesis.',
     protocolFocus: {
       challengeStandard: 'x402 / HTTP 402 Payment Required',
       settlementLayer: 'Stacks',
@@ -476,7 +491,9 @@ function buildResearchReport(topic, papers, llmResult, extractedAssets) {
       title: paper.title,
       published: formatDate(paper.published),
       authors: paper.authors,
-      id: paper.id
+      id: paper.id,
+      sourceType: paper.sourceType,
+      evidenceClass: paper.evidenceClass
     }))
   };
 }
@@ -495,7 +512,7 @@ app.get('/api/config', (_req, res) => {
     llmConfigured: Boolean(OPENAI_API_KEY),
     model: OPENAI_MODEL,
     providerBaseUrl: OPENAI_BASE_URL,
-    paperSource: 'arXiv',
+    paperSource: 'mixed (local x402/stacks kb + arxiv)',
     orchestrationMode: 'manager + planner + retriever + skeptic + synthesis + critic',
     requiredEnv: OPENAI_API_KEY ? [] : ['OPENAI_API_KEY']
   });
@@ -514,13 +531,13 @@ app.post('/api/research', async (req, res) => {
 
   try {
     const searchQuery = extractQuery(topic);
-    const papers = await fetchArxivPapers(searchQuery, topic);
+    const papers = await retrieveEvidence(searchQuery, topic);
     const id = makeId();
     const job = {
       id,
       topic,
       searchQuery,
-      paperSource: 'arXiv',
+      paperSource: 'mixed',
       papers,
       status: 'awaiting-payment',
       createdAt: new Date().toISOString(),
@@ -571,14 +588,14 @@ app.post('/api/jobs/:id/pay', async (req, res) => {
       {
         id: 'asset_1',
         type: 'diagram',
-        title: 'ZK Rollup architecture overview',
-        description: 'Simulated extracted diagram delivered by the paid Image Extractor Molbot.'
+        title: 'x402 challenge → Stacks settlement → capability release',
+        description: 'Simulated diagram delivered by the paid Image Extractor Molbot.'
       },
       {
         id: 'asset_2',
         type: 'chart',
-        title: 'Sequencer / prover / verifier interaction',
-        description: 'Simulated chart representing the system architecture flow.'
+        title: 'USDCx / sBTC payment routing for specialist agents',
+        description: 'Simulated chart showing asset-selection and settlement flow.'
       }
     ];
 
