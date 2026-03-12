@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useMemo, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8787';
 const DEMO_PAYMENT_TOKEN = 'demo-paid-token';
@@ -19,43 +21,16 @@ async function request(path, options = {}) {
   return data;
 }
 
-function SectionCard({ title, children }) {
-  return (
-    <div className="reportSection">
-      <h3>{title}</h3>
-      {children}
-    </div>
-  );
+function StatusPill({ status }) {
+  if (!status) return null;
+  return <span className={`status status-${status}`}>{String(status).replaceAll('_', ' ')}</span>;
 }
 
 export default function App() {
-  const [topic, setTopic] = useState('预测未来3年AI agent economies会如何发展：包括支付基础设施、自治工具市场、以及machine-to-machine commerce的演化路径。');
+  const [topic, setTopic] = useState('我想知道最近的关于solidity漏洞的文章');
   const [job, setJob] = useState(null);
-  const [jobs, setJobs] = useState([]);
-  const [config, setConfig] = useState(null);
-  const [contractState, setContractState] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-
-  async function refreshJobs() {
-    const data = await request('/api/jobs');
-    setJobs(data.jobs || []);
-  }
-
-  async function loadConfig() {
-    const data = await request('/api/config');
-    setConfig(data);
-  }
-
-  async function refreshContractState(jobId) {
-    const data = await request(`/api/jobs/${jobId}/contract-state`);
-    setContractState(data);
-  }
-
-  useEffect(() => {
-    loadConfig().catch(() => {});
-    refreshJobs().catch(() => {});
-  }, []);
 
   async function createJob(event) {
     event.preventDefault();
@@ -67,8 +42,6 @@ export default function App() {
         body: JSON.stringify({ topic })
       });
       setJob(created);
-      await refreshContractState(created.id);
-      await refreshJobs();
     } catch (err) {
       setError(err.message);
     } finally {
@@ -89,8 +62,6 @@ export default function App() {
         body: JSON.stringify({ paymentToken: DEMO_PAYMENT_TOKEN })
       });
       setJob(completed);
-      await refreshContractState(completed.id);
-      await refreshJobs();
     } catch (err) {
       setError(err.message);
     } finally {
@@ -98,379 +69,233 @@ export default function App() {
     }
   }
 
-  async function consumePayment() {
-    if (!job?.id) return;
-    setLoading(true);
-    setError('');
-    try {
-      const result = await request(`/api/jobs/${job.id}/consume`, {
-        method: 'POST',
-        body: JSON.stringify({})
-      });
-      setContractState(result.contractState);
-      setJob((prev) => prev ? ({ ...prev, paymentReceipt: result.paymentReceipt, contractState: result.contractState }) : prev);
-      await refreshJobs();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }
+  const reportMarkdown = job?.report?.markdown?.trim();
+  const topicLength = topic.trim().length;
+  const hasReport = Boolean(job?.report);
+
+  const timeline = useMemo(() => {
+    const currentStatus = job?.status;
+    return [
+      {
+        key: 'draft',
+        title: 'Topic drafted',
+        description: 'Research scope is defined and ready for submission.',
+        active: topicLength > 0,
+        complete: Boolean(job)
+      },
+      {
+        key: 'awaiting-payment',
+        title: 'Payment gate',
+        description: 'The report is prepared behind the x402 payment checkpoint.',
+        active: currentStatus === 'awaiting-payment',
+        complete: currentStatus === 'completed' || currentStatus === 'completed_with_fallback'
+      },
+      {
+        key: 'completed',
+        title: 'Dossier unlocked',
+        description: 'Final markdown report and references are available for reading.',
+        active: currentStatus === 'completed' || currentStatus === 'completed_with_fallback',
+        complete: currentStatus === 'completed' || currentStatus === 'completed_with_fallback'
+      }
+    ];
+  }, [job, topicLength]);
 
   return (
     <div className="page">
-      <header className="hero">
-        <span className="badge">AutoScholar V7.1 · Clarity-Oriented Stacks Payment Model</span>
-        <h1>Topic-Agnostic Research Agent, x402/Stacks-Native Premium Unlock</h1>
-        <p>
-          In V7.1, the research topic stays arbitrary, while the payment layer is fixed to a testnet Stacks model:
-          user wallet pays the project treasury address, x402 carries the challenge, and the settlement model is
-          structured for eventual Clarity-smart-contract verification.
-        </p>
+      <div className="pageGlow pageGlowA" aria-hidden="true" />
+      <div className="pageGlow pageGlowB" aria-hidden="true" />
+
+      <header className="hero panel panelHero">
+        <div className="heroTopline">
+          <span className="eyebrow">x402 research console</span>
+          <span className="badge">Protocol dossier</span>
+        </div>
+
+        <div className="heroGrid">
+          <div className="heroCopy stack-lg">
+            <div className="stack-sm">
+              <h1>Unlock a research dossier, not a generic AI answer.</h1>
+              <p className="heroText">
+                Submit a topic, pass the payment gate, and read a clean final report with references only.
+                Internal chain-of-thought, noisy agent chatter, and system diagnostics stay off the page.
+              </p>
+            </div>
+
+            <div className="heroMeta" aria-label="Product highlights">
+              <div className="metaChip">
+                <span className="metaLabel">Flow</span>
+                <strong>Topic → Pay → Read</strong>
+              </div>
+              <div className="metaChip">
+                <span className="metaLabel">Output</span>
+                <strong>Markdown dossier</strong>
+              </div>
+              <div className="metaChip">
+                <span className="metaLabel">Guardrail</span>
+                <strong>Reasoning hidden</strong>
+              </div>
+            </div>
+          </div>
+
+          <aside className="heroAside panel panelInset" aria-label="Research workflow overview">
+            <div className="asideHeader">
+              <p className="panelKicker">Workflow state</p>
+              <StatusPill status={job?.status || 'idle'} />
+            </div>
+            <ol className="timeline">
+              {timeline.map((item, index) => (
+                <li
+                  key={item.key}
+                  className={`timelineItem ${item.active ? 'is-active' : ''} ${item.complete ? 'is-complete' : ''}`}
+                >
+                  <div className="timelineMarker" aria-hidden="true">
+                    <span>{index + 1}</span>
+                  </div>
+                  <div>
+                    <h2>{item.title}</h2>
+                    <p>{item.description}</p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </aside>
+        </div>
       </header>
 
-      <main className="grid">
-        <section className="card">
-          <h2>Submit research topic</h2>
-          <form onSubmit={createJob} className="stack">
-            <textarea value={topic} onChange={(e) => setTopic(e.target.value)} rows={7} />
-            <button disabled={loading}>{loading ? 'Working…' : 'Create research job'}</button>
+      <main className="workspaceGrid">
+        <section className="panel composerCard" aria-labelledby="compose-heading">
+          <div className="sectionHeader sectionHeader-start">
+            <div>
+              <p className="panelKicker">Compose query</p>
+              <h2 id="compose-heading">Describe the topic you want investigated</h2>
+            </div>
+            <div className="counterChip" aria-label="Topic length">
+              {topicLength} chars
+            </div>
+          </div>
+
+          <form onSubmit={createJob} className="stack-lg">
+            <label className="fieldLabel" htmlFor="topic-input">
+              Research brief
+            </label>
+            <textarea
+              id="topic-input"
+              value={topic}
+              onChange={(e) => setTopic(e.target.value)}
+              rows={8}
+              placeholder="Ask for recent Solidity漏洞研究、x402 payment design tradeoffs、Stacks settlement architecture…"
+            />
+
+            <div className="actionRow">
+              <button className="primaryButton" disabled={loading}>
+                {loading ? 'Working…' : 'Create research job'}
+              </button>
+              <p className="helperText">Current API: {API_BASE}</p>
+            </div>
           </form>
-          {error ? <p className="error">{error}</p> : null}
+
+          {error ? <p className="error" role="alert">{error}</p> : null}
+
+          <div className="subgrid">
+            <article className="miniPanel">
+              <p className="panelKicker">What stays visible</p>
+              <ul className="list compact">
+                <li>Topic metadata</li>
+                <li>Payment checkpoint</li>
+                <li>Final markdown report</li>
+                <li>Reference links</li>
+              </ul>
+            </article>
+            <article className="miniPanel">
+              <p className="panelKicker">What stays hidden</p>
+              <ul className="list compact">
+                <li>Intermediate agent reasoning</li>
+                <li>Prompt internals</li>
+                <li>System diagnostics</li>
+                <li>Tool chatter</li>
+              </ul>
+            </article>
+          </div>
         </section>
 
-        <section className="card">
-          <h2>System config</h2>
-          {!config ? <p>Loading config…</p> : (
-            <ul className="list compact">
-              <li>API base: {config.apiBase}</li>
-              <li>LLM model: {config.model}</li>
-              <li>Provider: {config.providerBaseUrl}</li>
-              <li>Evidence source: {config.paperSource}</li>
-              <li>Orchestration: {config.orchestrationMode}</li>
-              <li>Payment standard: {config.paymentRail?.challengeStandard}</li>
-              <li>Settlement layer: {config.paymentRail?.settlementLayer}</li>
-              <li>Stacks network: {config.stacksIntegration?.network}</li>
-              <li>Stacks API: {config.stacksIntegration?.apiBase}</li>
-              <li>Verification mode: {config.stacksIntegration?.verification}</li>
-            </ul>
-          )}
-        </section>
+        <section className="panel reportCard" aria-labelledby="report-heading">
+          <div className="sectionHeader">
+            <div>
+              <p className="panelKicker">Unlocked output</p>
+              <h2 id="report-heading">Research dossier</h2>
+            </div>
+            {job ? <StatusPill status={job.status} /> : <span className="status status-idle">idle</span>}
+          </div>
 
-        <section className="card wide">
-          <h2>Active job</h2>
-          {!job ? <p>No job created yet.</p> : (
-            <div className="stack">
-              <div className="jobHeader">
-                <strong>{job.id}</strong>
-                <span className={`status status-${job.status}`}>{job.status}</span>
-              </div>
-
-              <div className="metaGrid">
-                <div>
-                  <p><strong>Topic</strong></p>
+          {!job ? (
+            <div className="emptyState panelInset">
+              <div className="emptyOrb" aria-hidden="true" />
+              <h3>No dossier yet</h3>
+              <p>
+                Start by submitting a topic. Once the job is created, this panel becomes the live dossier view.
+              </p>
+            </div>
+          ) : (
+            <div className="stack-lg">
+              <div className="jobMetaGrid">
+                <div className="miniPanel">
+                  <p className="panelKicker">Job id</p>
+                  <p className="monoText">{job.id || 'pending'}</p>
+                </div>
+                <div className="miniPanel">
+                  <p className="panelKicker">Status</p>
+                  <p>{job.status}</p>
+                </div>
+                <div className="miniPanel miniPanel-topic">
+                  <p className="panelKicker">Topic</p>
                   <p>{job.topic}</p>
                 </div>
-                <div>
-                  <p><strong>Research mode</strong></p>
-                  <p>{job.researchMode}</p>
-                </div>
-                <div>
-                  <p><strong>Search query</strong></p>
-                  <p>{job.searchQuery}</p>
-                </div>
-                <div>
-                  <p><strong>Meeting status</strong></p>
-                  <p>{job.orchestration?.meetingStatus}</p>
-                </div>
               </div>
 
-              <SectionCard title="Layer separation">
-                <ul className="list compact">
-                  <li><strong>Research layer:</strong> retrieve papers, debate, and synthesize the user’s topic.</li>
-                  <li><strong>Payment layer:</strong> x402 challenge + Stacks settlement flow unlocks premium report generation.</li>
-                </ul>
-              </SectionCard>
-
-              {job.orchestration?.identities?.length ? (
-                <SectionCard title="Agent identities">
-                  <div className="debateList">
-                    {job.orchestration.identities.map((entry, index) => (
-                      <div key={`${entry.agent}-${index}`} className="debateCard">
-                        <strong>{entry.agent}</strong>
-                        <div className="muted">{entry.role}</div>
-                        <p>{entry.persona}</p>
-                        <p><span className="muted">Authority:</span> {entry.authority}</p>
-                        <p><span className="muted">Payment capability:</span> {entry.paymentCapability}</p>
-                      </div>
-                    ))}
-                  </div>
-                </SectionCard>
-              ) : null}
-
-              {job.papers?.length ? (
-                <SectionCard title="Topic evidence">
-                  <ul className="list compact">
-                    {job.papers.map((paper) => (
-                      <li key={paper.id}>
-                        <strong>{paper.title}</strong>
-                        <div>{paper.sourceType} · {paper.evidenceClass} · relevance {paper.relevanceScore}</div>
-                      </li>
-                    ))}
-                  </ul>
-                </SectionCard>
-              ) : null}
-
-              {job.paymentEvidence?.length ? (
-                <SectionCard title="x402 / Stacks payment-rail evidence">
-                  <ul className="list compact">
-                    {job.paymentEvidence.map((paper) => (
-                      <li key={paper.id}>
-                        <strong>{paper.title}</strong>
-                        <div>{paper.sourceType} · {paper.evidenceClass}</div>
-                      </li>
-                    ))}
-                  </ul>
-                </SectionCard>
-              ) : null}
-
               {job.status === 'awaiting-payment' ? (
-                <div className="paymentBox">
-                  <h3>x402 premium unlock</h3>
-                  <p>{job.paymentRequest.reason}</p>
-                  <ul className="list compact">
-                    <li>Asset: {job.paymentRequest.asset}</li>
-                    <li>Asset type: {job.paymentRequest.assetType}</li>
-                    <li>Amount: {job.paymentRequest.amount}</li>
-                    <li>Payer: {job.paymentRequest.payer}</li>
-                    <li>Recipient: {job.paymentRequest.recipient}</li>
-                    <li>Challenge: {job.paymentRequest.challenge}</li>
-                    <li>Stacks network: {job.paymentRequest.stacks?.network}</li>
-                    <li>Stacks API: {job.paymentRequest.stacks?.apiBase}</li>
-                    <li>Settlement method: {job.paymentRequest.stacks?.settlementMethod}</li>
-                    <li>Clarity contract: {job.paymentRequest.clarity?.contractPrincipal}</li>
-                    <li>Clarity function: {job.paymentRequest.clarity?.publicFunction}</li>
-                    <li>Memo: {job.paymentRequest.stacks?.memo}</li>
-                  </ul>
-                  <button onClick={payAndComplete} disabled={loading}>
-                    {loading ? 'Processing payment…' : 'Pay via x402 + Stacks flow and unlock report'}
+                <div className="unlockCard panelInset">
+                  <div className="unlockHeader">
+                    <div>
+                      <p className="panelKicker">Payment required</p>
+                      <h3>Unlock the final report</h3>
+                    </div>
+                    <span className="tokenPill">x402 gate</span>
+                  </div>
+                  <p>{job.paymentRequest?.reason || 'Payment is required before the report can be revealed.'}</p>
+                  <button className="primaryButton" onClick={payAndComplete} disabled={loading}>
+                    {loading ? 'Processing payment…' : 'Unlock report'}
                   </button>
                 </div>
               ) : null}
 
-              {job.report ? (
-                <div className="report stack">
-                  <h3>{job.report.title}</h3>
-
-                  <SectionCard title="Executive summary">
-                    <p>{job.report.executiveSummary}</p>
-                  </SectionCard>
-
-                  <div className="columns">
-                    <SectionCard title="Research question">
-                      <p>{job.report.researchQuestion}</p>
-                    </SectionCard>
-                    <SectionCard title="Methodology">
-                      <p>{job.report.methodology}</p>
-                    </SectionCard>
+              {hasReport ? (
+                <article className="reportBody panelInset stack-lg">
+                  <div className="reportHeader">
+                    <div>
+                      <p className="panelKicker">Final output</p>
+                      <p className="reportTopic">{job.topic}</p>
+                    </div>
                   </div>
 
-                  <SectionCard title="Payment rail (fixed infrastructure layer)">
-                    <ul className="list compact">
-                      <li>Challenge standard: {job.report.paymentRail?.challengeStandard}</li>
-                      <li>Settlement layer: {job.report.paymentRail?.settlementLayer}</li>
-                      <li>Settlement assets: {(job.report.paymentRail?.settlementAssets || []).join(', ')}</li>
-                      <li>Authorization model: {job.report.paymentRail?.authorizationModel}</li>
-                      <li>Unlock rule: {job.report.paymentRail?.queryUnlock}</li>
-                      <li>Stacks network: {job.report.paymentRail?.stacks?.network}</li>
-                      <li>Stacks API: {job.report.paymentRail?.stacks?.apiBase}</li>
-                      <li>Verification mode: {job.report.paymentRail?.stacks?.verificationMode}</li>
-                      <li>Contract language: Clarity</li>
-                    </ul>
-                  </SectionCard>
-
-                  {job.report.paymentContract ? (
-                    <SectionCard title="Payment contract state machine">
-                      <ul className="list compact">
-                        <li>Contract principal: {job.report.paymentContract.contractPrincipal}</li>
-                        <li>States: {(job.report.paymentContract.stateMachine || []).join(' → ')}</li>
-                        <li>Read-only functions: {(job.report.paymentContract.readOnlyFns || []).join(', ')}</li>
-                        <li>Public functions: {(job.report.paymentContract.publicFns || []).join(', ')}</li>
-                        <li>Backend verification: {job.report.paymentContract.backendVerificationModel}</li>
-                        <li>Adapter source: {job.report.paymentContract.currentState?.source}</li>
-                        <li>Current contract invoice status: {job.report.paymentContract.currentState?.invoiceStatus}</li>
-                        <li>Next adapter action: {job.report.paymentContract.currentState?.nextAction}</li>
-                      </ul>
-                    </SectionCard>
-                  ) : null}
-
-                  {(job.paymentReceipt?.stateMachine || contractState?.stateMachine) ? (
-                    <SectionCard title="Payment state timeline">
-                      <ul className="list compact">
-                        <li>Current invoice status: {contractState?.invoiceStatus || job.paymentReceipt?.invoiceStatus}</li>
-                        <li>Contract state reader: {job.paymentReceipt?.contractStateReader}</li>
-                        <li>Next contract action: {contractState?.nextAction || job.paymentReceipt?.nextContractAction}</li>
-                        <li>Adapter source: {contractState?.source}</li>
-                        <li>Timeline: {((contractState?.stateMachine || job.paymentReceipt?.stateMachine) || []).join(' → ')}</li>
-                      </ul>
-                      {(contractState?.nextAction === 'consume-payment' || job.paymentReceipt?.nextContractAction === 'consume-payment') ? (
-                        <button onClick={consumePayment} disabled={loading}>Mark premium unlock consumed</button>
-                      ) : null}
-                    </SectionCard>
-                  ) : null}
-
-                  {job.paymentRequest?.verificationPlan ? (
-                    <SectionCard title="Clarity verification plan">
-                      <ul className="list compact">
-                        <li>Mode: {job.paymentRequest.verificationPlan.mode}</li>
-                        <li>Replay key: {job.paymentRequest.verificationPlan.replayKey}</li>
-                        <li>Consume function: {job.paymentRequest.verificationPlan.consumeFunction}</li>
-                        <li>Status reader: {job.paymentRequest.verificationPlan.statusReader}</li>
-                        <li>State machine: {(job.paymentRequest.verificationPlan.stateMachine || []).join(' → ')}</li>
-                        {(job.paymentRequest.verificationPlan.checks || []).map((item, index) => (
-                          <li key={`${item}-${index}`}>{item}</li>
-                        ))}
-                      </ul>
-                    </SectionCard>
-                  ) : null}
-
-                  <div className="columns">
-                    <SectionCard title="Key findings">
-                      <ul className="list compact">
-                        {(job.report.keyFindings || []).map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}
-                      </ul>
-                    </SectionCard>
-                    <SectionCard title="Implications">
-                      <ul className="list compact">
-                        {(job.report.implications || []).map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}
-                      </ul>
-                    </SectionCard>
-                  </div>
-
-                  {(job.report.scenarios || []).length ? (
-                    <SectionCard title="Forecast scenarios">
-                      <div className="debateList">
-                        {job.report.scenarios.map((item, index) => (
-                          <div key={`${item.name}-${index}`} className="debateCard">
-                            <strong>{item.name}</strong>
-                            <div className="muted">Probability: {item.probability}</div>
-                            <p>{item.outlook}</p>
-                            <p><span className="muted">Driver:</span> {item.driver}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </SectionCard>
-                  ) : null}
-
-                  {(job.report.timeline || []).length ? (
-                    <SectionCard title="Timeline outlook">
-                      <ul className="list compact">
-                        {job.report.timeline.map((item, index) => (
-                          <li key={`${item.window}-${index}`}><strong>{item.window}</strong> — {item.expectation}</li>
-                        ))}
-                      </ul>
-                    </SectionCard>
-                  ) : null}
-
-                  <div className="columns">
-                    <SectionCard title="Research quality">
-                      <ul className="list compact">
-                        <li>Evidence coverage: {job.report.quality?.evidenceCoverage}</li>
-                        <li>Synthesis mode: {job.report.quality?.synthesisMode}</li>
-                        <li>Confidence: {job.report.quality?.confidence}</li>
-                        <li>Forecast framework: {job.report.quality?.evidenceStats?.['forecast-framework'] ?? 0}</li>
-                        <li>Supporting: {job.report.quality?.evidenceStats?.supporting ?? 0}</li>
-                        <li>Off-topic: {job.report.quality?.evidenceStats?.['off-topic'] ?? 0}</li>
-                      </ul>
-                    </SectionCard>
-                    <SectionCard title="LLM runtime">
-                      <ul className="list compact">
-                        <li>Mode: {job.llm?.mode}</li>
-                        <li>Model: {job.llm?.model}</li>
-                        <li>Provider: {job.llm?.providerBaseUrl}</li>
-                      </ul>
-                    </SectionCard>
-                  </div>
-
-                  <SectionCard title="AI Parliament meeting notes">
-                    <div className="debateList">
-                      {(job.report.parliament || []).map((entry, index) => (
-                        <div key={`${entry.agent}-${index}`} className="debateCard">
-                          <strong>{entry.agent}</strong>
-                          <div className="muted">{entry.role}</div>
-                          <p>{entry.stance}</p>
-                        </div>
-                      ))}
+                  {reportMarkdown ? (
+                    <div className="markdownReport">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {reportMarkdown}
+                      </ReactMarkdown>
                     </div>
-                  </SectionCard>
-
-                  <SectionCard title="Topic evidence table">
-                    <div className="evidenceTable">
-                      {(job.report.evidenceTable || []).map((item, index) => (
-                        <div key={`${item.title}-${index}`} className="evidenceRow">
-                          <strong>{item.title}</strong>
-                          <p><span className="muted">Evidence class:</span> {item.evidenceClass}</p>
-                          <p><span className="muted">Source type:</span> {item.sourceType}</p>
-                          <p><span className="muted">Why it matters:</span> {item.whyItMatters}</p>
-                          <p><span className="muted">Evidence:</span> {item.evidence}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </SectionCard>
-
-                  <SectionCard title="Payment-rail evidence table">
-                    <div className="evidenceTable">
-                      {(job.report.paymentEvidenceTable || []).map((item, index) => (
-                        <div key={`${item.title}-${index}`} className="evidenceRow">
-                          <strong>{item.title}</strong>
-                          <p><span className="muted">Evidence class:</span> {item.evidenceClass}</p>
-                          <p><span className="muted">Source type:</span> {item.sourceType}</p>
-                          <p><span className="muted">Why it matters:</span> {item.whyItMatters}</p>
-                          <p><span className="muted">Evidence:</span> {item.evidence}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </SectionCard>
-
-                  <SectionCard title="x402 / Stacks payment flow">
-                    <ul className="list compact">
-                      {(job.report.paymentFlow || []).map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}
-                    </ul>
-                    <p className="muted">
-                      Model: user wallet pays the platform treasury on Stacks testnet; later versions can swap the transfer path
-                      into a Clarity smart contract call without changing the research workflow.
-                    </p>
-                  </SectionCard>
-
-                  <SectionCard title="Extracted assets">
-                    <ul className="list compact">
-                      {(job.report.extractedAssets || []).map((asset) => (
-                        <li key={asset.id}>{asset.title} — {asset.description}</li>
-                      ))}
-                    </ul>
-                  </SectionCard>
-
-                  <SectionCard title="Next research actions">
-                    <ul className="list compact">
-                      {(job.report.nextResearchActions || []).map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}
-                    </ul>
-                  </SectionCard>
+                  ) : (
+                    <p className="muted">The report content is not available yet.</p>
+                  )}
+                </article>
+              ) : (
+                <div className="emptyState panelInset emptyStateCompact">
+                  <h3>Report not revealed yet</h3>
+                  <p>
+                    The job exists, but the dossier content is still waiting on the next workflow step.
+                  </p>
                 </div>
-              ) : null}
+              )}
             </div>
-          )}
-        </section>
-
-        <section className="card wide">
-          <h2>Job history</h2>
-          {jobs.length === 0 ? <p>No jobs yet.</p> : (
-            <ul className="list compact">
-              {jobs.map((item) => (
-                <li key={item.id}>
-                  <strong>{item.id}</strong> — {item.topic} — <em>{item.status}</em>
-                </li>
-              ))}
-            </ul>
           )}
         </section>
       </main>
