@@ -1,0 +1,160 @@
+:root {
+  color-scheme: dark;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  background: #08111f;
+  color: #ecf2ff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: radial-gradient(circle at top, #12233f, #08111f 55%);
+}
+
+button,
+textarea {
+  font: inherit;
+}
+
+button {
+  background: linear-gradient(135deg, #5b8cff, #9c6bff);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  padding: 0.9rem 1.1rem;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+textarea {
+  width: 100%;
+  border-radius: 14px;
+  border: 1px solid #31425e;
+  background: #0d1728;
+  color: #eef4ff;
+  padding: 1rem;
+}
+
+.page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 40px 20px 80px;
+}
+
+.hero {
+  margin-bottom: 28px;
+}
+
+.hero h1 {
+  margin: 0.6rem 0;
+  font-size: clamp(2rem, 4vw, 3.5rem);
+}
+
+.hero p {
+  max-width: 800px;
+  color: #c6d2ea;
+  line-height: 1.6;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  background: rgba(110, 153, 255, 0.16);
+  color: #b8cdff;
+  border: 1px solid rgba(110, 153, 255, 0.28);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.card {
+  background: rgba(10, 19, 34, 0.85);
+  border: 1px solid rgba(122, 145, 191, 0.18);
+  border-radius: 20px;
+  padding: 22px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.25);
+}
+
+.card.wide {
+  grid-column: 1 / -1;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.list {
+  margin: 0;
+  padding-left: 1.2rem;
+  color: #cdd9ef;
+  line-height: 1.7;
+}
+
+.list.compact li + li {
+  margin-top: 0.45rem;
+}
+
+.jobHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.9rem;
+  text-transform: capitalize;
+}
+
+.status-awaiting-payment {
+  background: rgba(255, 186, 73, 0.15);
+  color: #ffd47d;
+}
+
+.status-completed {
+  background: rgba(39, 201, 126, 0.16);
+  color: #8ef0bb;
+}
+
+.paymentBox,
+.report {
+  background: #0d1728;
+  border-radius: 16px;
+  border: 1px solid #263754;
+  padding: 18px;
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.error {
+  color: #ff8f8f;
+}
+
+@media (max-width: 900px) {
+  .grid,
+  .columns {
+    grid-template-columns: 1fr;
+  }
+}

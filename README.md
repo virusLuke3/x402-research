@@ -1,2 +1,93 @@
-# x402-research
-x402 and stacks on bitcoin and research network
+# AutoScholar
+
+AutoScholar is an x402-powered agentic research network prototype for DoraHacks BUIDL Battle 2.
+
+It demonstrates this flow:
+- a **Manager Molbot** receives a complex research request
+- it queries **arXiv** for relevant papers
+- it delegates a specialist task to a paid **Image Extractor Molbot**
+- the specialist returns an **HTTP 402 Payment Required** challenge
+- the manager simulates Stacks-style settlement
+- a summarizer model is called through an **OpenAI-compatible provider**
+- the final research result is returned as a combined report
+
+## Repo Structure
+
+```text
+apps/
+  backend/   Express API for manager flow, arXiv search, and x402-style challenge
+  frontend/  React + Vite demo UI
+  
+docs/
+  architecture.md  Current architecture notes and evolution plan
+GUIDE.md     Product, architecture, MVP, and hackathon positioning
+PROJECT.md   Simple project management status
+```
+
+## Local Development
+
+### Requirements
+- Node.js 20+
+- npm 10+
+
+### Install
+
+```bash
+npm install
+```
+
+### Configure
+
+Copy `.env.example` to `.env` and fill in values.
+
+Current local setup uses:
+- OpenAI-compatible base URL from Right Codes
+- model `gpt-5.4`
+- paper source `arXiv`
+- simulated chain payment
+
+### Run
+
+```bash
+npm run dev
+```
+
+This starts:
+- frontend on `http://localhost:5173`
+- backend on `http://localhost:8787`
+
+## Demo Flow
+
+1. Open the frontend.
+2. Submit a research prompt.
+3. The manager searches arXiv and creates a job in `awaiting-payment`.
+4. The UI shows the x402-style challenge from the specialist molbot.
+5. Click **Simulate chain payment and continue**.
+6. The backend simulates payment verification, calls the summarizer model, and returns a completed report.
+
+## Configuration
+
+Environment variables:
+
+- `PORT`
+- `FRONTEND_ORIGIN`
+- `DEMO_PAYMENT_TOKEN`
+- `OPENAI_API_KEY`
+- `OPENAI_BASE_URL`
+- `OPENAI_MODEL`
+
+## Current Status
+
+Implemented:
+- frontend dashboard
+- backend orchestration API
+- arXiv paper search
+- x402-style payment challenge flow
+- simulated chain payment receipt
+- OpenAI-compatible summarization through configured provider
+
+Still simulated / pending:
+- real on-chain Stacks payment verification
+- real PDF-native diagram extraction
+- persistent storage
+- multi-specialist routing
