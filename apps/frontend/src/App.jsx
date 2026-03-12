@@ -33,6 +33,42 @@ const NEGOTIATION_FLOW = [
   'If redeemed, invoice moves to consumed to prevent replay.'
 ];
 
+function buildPayloadExamples(job) {
+  const invoiceId = job?.paymentReceipt?.invoiceId || job?.paymentRequest?.invoiceId || 'inv_demo_001';
+  const asset = job?.paymentRequest?.asset || 'STX';
+  const contract = job?.paymentRequest?.stacks?.contract || 'autoscholar-payments.clar';
+  return {
+    challenge: {
+      service: 'premium-research-dossier',
+      price: '0.10',
+      asset,
+      recipient: 'autoscholar-service-principal',
+      capability: 'premium-report',
+      expiry: '2026-03-31T23:59:59Z',
+      invoiceId
+    },
+    invoice: {
+      invoiceId,
+      payer: 'molbot-buyer',
+      recipient: 'autoscholar-service-principal',
+      asset,
+      amount: '0.10',
+      status: job?.contractState?.invoiceStatus || 'created',
+      createdAt: '2026-03-12T20:00:00Z',
+      consumedAt: job?.contractState?.invoiceStatus === 'consumed' ? '2026-03-12T20:05:00Z' : null,
+      contract
+    },
+    entitlement: {
+      capability: 'premium-report',
+      scope: 'single dossier unlock',
+      downloadRights: true,
+      delegationRights: false,
+      replayPolicy: 'consume-on-redeem',
+      proofOfPayment: job?.paymentReceipt?.txid || 'demo-payment-proof'
+    }
+  };
+}
+
 async function request(path, options = {}) {
   const response = await fetch(`${API_BASE}${path}`, {
     headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
@@ -169,6 +205,8 @@ export default function App() {
     contractState: job?.contractState?.invoiceStatus || 'created'
   }), [job]);
 
+  const payloadExamples = useMemo(() => buildPayloadExamples(job), [job]);
+
   return (
     <div className="page">
       <div className="pageGlow pageGlowA" aria-hidden="true" />
@@ -244,6 +282,21 @@ export default function App() {
           <ol className="sequenceList">
             {NEGOTIATION_FLOW.map((step) => <li key={step}>{step}</li>)}
           </ol>
+        </div>
+
+        <div className="payloadGrid">
+          <article className="miniPanel payloadCard">
+            <p className="panelKicker">Example x402 challenge</p>
+            <pre className="payloadPre">{JSON.stringify(payloadExamples.challenge, null, 2)}</pre>
+          </article>
+          <article className="miniPanel payloadCard">
+            <p className="panelKicker">Example invoice object</p>
+            <pre className="payloadPre">{JSON.stringify(payloadExamples.invoice, null, 2)}</pre>
+          </article>
+          <article className="miniPanel payloadCard">
+            <p className="panelKicker">Example entitlement object</p>
+            <pre className="payloadPre">{JSON.stringify(payloadExamples.entitlement, null, 2)}</pre>
+          </article>
         </div>
       </section>
 

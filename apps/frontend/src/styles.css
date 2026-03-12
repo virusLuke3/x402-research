@@ -1043,6 +1043,7 @@ textarea:focus {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  margin-bottom: 12px;
 }
 
 .sequenceList {
@@ -1055,8 +1056,37 @@ textarea:focus {
   color: var(--text-dim);
 }
 
+.payloadGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.payloadCard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.payloadPre {
+  margin: 0;
+  overflow-x: auto;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: rgba(0,0,0,0.22);
+  color: #cbe9ff;
+  font-family: var(--font-mono);
+  font-size: 0.79rem;
+  line-height: 1.7;
+}
+
 @media (max-width: 1240px) {
   .specGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .payloadGrid {
     grid-template-columns: 1fr;
   }
 }

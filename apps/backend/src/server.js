@@ -882,6 +882,42 @@ function buildFallbackReport(topic, researchMode, topicProfile, evidenceBundle) 
     };
   }
 
+  if (topicProfile.key === 'commerce') {
+    return {
+      mode: 'fallback',
+      executiveSummary: `Current evidence suggests a credible molbot-commerce protocol on x402 + Stacks should separate pricing envelopes, invoice-state transitions, and post-payment entitlements. The most defensible near-term design is not a fully autonomous open market, but a specialist-service network where manager molbots route demand to paid agents and unlock outputs after verifiable settlement.`,
+      researchQuestion: topic,
+      methodology: 'Topic-specific commerce retrieval plus deterministic protocol synthesis fallback.',
+      keyFindings: [
+        'x402 is best treated as a machine-readable challenge and entitlement layer, not only a paywall response code.',
+        'Stacks settlement semantics become more legible when modeled as created → paid → consumed invoice state transitions.',
+        'STX, sBTC, and USDCx should be positioned as different pricing rails rather than interchangeable assets with identical product roles.',
+        'Specialist molbot networks are more realistic near-term than unrestricted autonomous agent markets.'
+      ],
+      implications: [
+        'The demo should emphasize challenge schema, invoice schema, and entitlement schema as first-class protocol objects.',
+        'Security, shopping, and content molbots can share the same payment and capability-release primitives while pricing differently by rail.'
+      ],
+      limitations: [
+        'External literature on molbot-to-molbot commerce remains sparse, so part of the current synthesis is protocol design reasoning rather than mature field consensus.',
+        'More domain-specific sources are still needed beyond the local commerce framework and payment rail knowledge base.'
+      ],
+      noveltyAssessment: 'High as a protocol and product framing, with medium evidence maturity at the current retrieval depth.',
+      consensus: 'A strong molbot-commerce protocol should keep service pricing, settlement verification, and capability redemption explicitly separated while allowing the same unlock primitives to support different agent specializations.',
+      nextResearchActions: [
+        'Add protocol-specific retrievers for machine-payable API access, capability tokens, and invoice replay protection.',
+        'Introduce section-by-section protocol writing for challenge schema, lifecycle semantics, and rail selection tradeoffs.',
+        'Bind each entitlement claim to evidence rows in the final dossier.'
+      ],
+      quality: {
+        evidenceCoverage: evidenceBundle.topicEvidence.length,
+        synthesisMode: 'commerce-fallback',
+        confidence: stats['topic-core'] + stats['topic-framework'] + stats['payment-rail'] >= 3 ? 'medium' : 'low',
+        evidenceStats: stats
+      }
+    };
+  }
+
   return {
     mode: 'fallback',
     executiveSummary: `The system can research the topic “${topic}” directly, while x402 + Stacks remains the premium payment rail that unlocks synthesis and specialist assets.`,
