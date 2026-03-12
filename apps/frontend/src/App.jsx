@@ -5,6 +5,13 @@ import remarkGfm from 'remark-gfm';
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8787';
 const DEMO_PAYMENT_TOKEN = 'demo-paid-token';
 
+const TOPIC_PRESETS = [
+  '我想知道最近的关于solidity漏洞的文章',
+  'x402 payment gate 对 agent service monetization 的意义是什么？',
+  'Stacks settlement 在 agentic commerce 里的优缺点有哪些？',
+  '对比 Solidity 常见重入漏洞与访问控制漏洞的研究现状'
+];
+
 async function request(path, options = {}) {
   const response = await fetch(`${API_BASE}${path}`, {
     headers: {
@@ -22,8 +29,17 @@ async function request(path, options = {}) {
 }
 
 function StatusPill({ status }) {
-  if (!status) return null;
+  if (!status) return <span className="status status-idle">idle</span>;
   return <span className={`status status-${status}`}>{String(status).replaceAll('_', ' ')}</span>;
+}
+
+function StatTile({ label, value, tone = 'default' }) {
+  return (
+    <div className={`statTile statTile-${tone}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
 }
 
 export default function App() {
@@ -78,100 +94,125 @@ export default function App() {
     return [
       {
         key: 'draft',
-        title: 'Topic drafted',
-        description: 'Research scope is defined and ready for submission.',
-        active: topicLength > 0,
+        title: 'Draft topic',
+        description: 'Define the research question and scope.',
+        active: topicLength > 0 && !job,
         complete: Boolean(job)
       },
       {
         key: 'awaiting-payment',
         title: 'Payment gate',
-        description: 'The report is prepared behind the x402 payment checkpoint.',
+        description: 'The premium dossier waits behind x402 unlock.',
         active: currentStatus === 'awaiting-payment',
         complete: currentStatus === 'completed' || currentStatus === 'completed_with_fallback'
       },
       {
         key: 'completed',
-        title: 'Dossier unlocked',
-        description: 'Final markdown report and references are available for reading.',
+        title: 'Read dossier',
+        description: 'The final report is unlocked and rendered below.',
         active: currentStatus === 'completed' || currentStatus === 'completed_with_fallback',
         complete: currentStatus === 'completed' || currentStatus === 'completed_with_fallback'
       }
     ];
   }, [job, topicLength]);
 
+  const summaryStats = useMemo(() => {
+    return {
+      mode: job?.researchMode || 'analysis',
+      papers: job?.papers?.length || 0,
+      paymentEvidence: job?.paymentEvidence?.length || 0,
+      status: job?.status || 'idle'
+    };
+  }, [job]);
+
   return (
     <div className="page">
       <div className="pageGlow pageGlowA" aria-hidden="true" />
       <div className="pageGlow pageGlowB" aria-hidden="true" />
 
-      <header className="hero panel panelHero">
-        <div className="heroTopline">
-          <span className="eyebrow">x402 research console</span>
-          <span className="badge">Protocol dossier</span>
+      <header className="topbar panelLite" aria-label="Application header">
+        <div className="brandLockup">
+          <span className="brandMark" aria-hidden="true">◈</span>
+          <div>
+            <p className="brandName">AutoScholar</p>
+            <p className="brandSub">x402 research console</p>
+          </div>
+        </div>
+        <div className="topbarMeta">
+          <span className="badge">Protocol dossier UI</span>
+          <StatusPill status={job?.status} />
+        </div>
+      </header>
+
+      <section className="heroSplit panel">
+        <div className="heroMain stack-lg">
+          <div className="heroHead stack-sm">
+            <span className="eyebrow">Premium research workflow</span>
+            <h1>Research pages should feel like dossiers, not chat windows.</h1>
+            <p className="heroText">
+              This interface keeps the topic composer, payment gate, and final markdown report in one clear flow.
+              It’s designed to feel deliberate, editorial, and protocol-native rather than generic “AI app” chrome.
+            </p>
+          </div>
+
+          <div className="statsGrid" aria-label="Current summary stats">
+            <StatTile label="Research mode" value={summaryStats.mode} tone="accent" />
+            <StatTile label="Topic evidence" value={String(summaryStats.papers)} />
+            <StatTile label="Payment evidence" value={String(summaryStats.paymentEvidence)} />
+            <StatTile label="Workflow" value={String(summaryStats.status).replaceAll('_', ' ')} tone="warn" />
+          </div>
         </div>
 
-        <div className="heroGrid">
-          <div className="heroCopy stack-lg">
-            <div className="stack-sm">
-              <h1>Unlock a research dossier, not a generic AI answer.</h1>
-              <p className="heroText">
-                Submit a topic, pass the payment gate, and read a clean final report with references only.
-                Internal chain-of-thought, noisy agent chatter, and system diagnostics stay off the page.
-              </p>
-            </div>
-
-            <div className="heroMeta" aria-label="Product highlights">
-              <div className="metaChip">
-                <span className="metaLabel">Flow</span>
-                <strong>Topic → Pay → Read</strong>
-              </div>
-              <div className="metaChip">
-                <span className="metaLabel">Output</span>
-                <strong>Markdown dossier</strong>
-              </div>
-              <div className="metaChip">
-                <span className="metaLabel">Guardrail</span>
-                <strong>Reasoning hidden</strong>
-              </div>
+        <aside className="heroRail panelInset">
+          <div className="sectionTitleRow">
+            <div>
+              <p className="panelKicker">Workflow state</p>
+              <h2>Current path</h2>
             </div>
           </div>
 
-          <aside className="heroAside panel panelInset" aria-label="Research workflow overview">
-            <div className="asideHeader">
-              <p className="panelKicker">Workflow state</p>
-              <StatusPill status={job?.status || 'idle'} />
-            </div>
-            <ol className="timeline">
-              {timeline.map((item, index) => (
-                <li
-                  key={item.key}
-                  className={`timelineItem ${item.active ? 'is-active' : ''} ${item.complete ? 'is-complete' : ''}`}
-                >
-                  <div className="timelineMarker" aria-hidden="true">
-                    <span>{index + 1}</span>
-                  </div>
-                  <div>
-                    <h2>{item.title}</h2>
-                    <p>{item.description}</p>
-                  </div>
-                </li>
-              ))}
-            </ol>
-          </aside>
-        </div>
-      </header>
+          <ol className="timeline">
+            {timeline.map((item, index) => (
+              <li
+                key={item.key}
+                className={`timelineItem ${item.active ? 'is-active' : ''} ${item.complete ? 'is-complete' : ''}`}
+              >
+                <div className="timelineMarker" aria-hidden="true">
+                  <span>{index + 1}</span>
+                </div>
+                <div>
+                  <h3>{item.title}</h3>
+                  <p>{item.description}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </aside>
+      </section>
 
       <main className="workspaceGrid">
         <section className="panel composerCard" aria-labelledby="compose-heading">
           <div className="sectionHeader sectionHeader-start">
             <div>
               <p className="panelKicker">Compose query</p>
-              <h2 id="compose-heading">Describe the topic you want investigated</h2>
+              <h2 id="compose-heading">Frame the research question</h2>
             </div>
-            <div className="counterChip" aria-label="Topic length">
-              {topicLength} chars
+            <div className="counterGroup">
+              <span className="counterChip">{topicLength} chars</span>
             </div>
+          </div>
+
+          <div className="presetRow" aria-label="Suggested topics">
+            {TOPIC_PRESETS.map((preset) => (
+              <button
+                key={preset}
+                type="button"
+                className={`presetChip ${topic === preset ? 'is-active' : ''}`}
+                onClick={() => setTopic(preset)}
+              >
+                {preset}
+              </button>
+            ))}
           </div>
 
           <form onSubmit={createJob} className="stack-lg">
@@ -183,56 +224,56 @@ export default function App() {
               value={topic}
               onChange={(e) => setTopic(e.target.value)}
               rows={8}
-              placeholder="Ask for recent Solidity漏洞研究、x402 payment design tradeoffs、Stacks settlement architecture…"
+              placeholder="Ask for recent Solidity vulnerabilities, x402 payment design tradeoffs, or Stacks settlement architecture…"
             />
 
             <div className="actionRow">
               <button className="primaryButton" disabled={loading}>
                 {loading ? 'Working…' : 'Create research job'}
               </button>
-              <p className="helperText">Current API: {API_BASE}</p>
+              <p className="helperText">API base: {API_BASE}</p>
             </div>
           </form>
 
           {error ? <p className="error" role="alert">{error}</p> : null}
 
           <div className="subgrid">
-            <article className="miniPanel">
-              <p className="panelKicker">What stays visible</p>
+            <article className="miniPanel infoPanel">
+              <p className="panelKicker">Visible to user</p>
               <ul className="list compact">
-                <li>Topic metadata</li>
-                <li>Payment checkpoint</li>
-                <li>Final markdown report</li>
-                <li>Reference links</li>
+                <li>Topic metadata and workflow status</li>
+                <li>x402 payment checkpoint</li>
+                <li>Unlocked markdown dossier</li>
+                <li>References and supporting evidence</li>
               </ul>
             </article>
-            <article className="miniPanel">
-              <p className="panelKicker">What stays hidden</p>
+            <article className="miniPanel infoPanel">
+              <p className="panelKicker">Intentionally hidden</p>
               <ul className="list compact">
-                <li>Intermediate agent reasoning</li>
-                <li>Prompt internals</li>
-                <li>System diagnostics</li>
-                <li>Tool chatter</li>
+                <li>Intermediate chain-of-thought</li>
+                <li>Internal tool reasoning</li>
+                <li>Prompt internals and diagnostics</li>
+                <li>Noisy agent coordination traces</li>
               </ul>
             </article>
           </div>
         </section>
 
         <section className="panel reportCard" aria-labelledby="report-heading">
-          <div className="sectionHeader">
+          <div className="sectionHeader sectionHeader-start">
             <div>
-              <p className="panelKicker">Unlocked output</p>
+              <p className="panelKicker">Output view</p>
               <h2 id="report-heading">Research dossier</h2>
             </div>
-            {job ? <StatusPill status={job.status} /> : <span className="status status-idle">idle</span>}
+            <StatusPill status={job?.status} />
           </div>
 
           {!job ? (
             <div className="emptyState panelInset">
               <div className="emptyOrb" aria-hidden="true" />
-              <h3>No dossier yet</h3>
+              <h3>No active dossier</h3>
               <p>
-                Start by submitting a topic. Once the job is created, this panel becomes the live dossier view.
+                Submit a topic on the left. Once the research job is created, this panel becomes the active dossier view.
               </p>
             </div>
           ) : (
@@ -243,13 +284,18 @@ export default function App() {
                   <p className="monoText">{job.id || 'pending'}</p>
                 </div>
                 <div className="miniPanel">
-                  <p className="panelKicker">Status</p>
-                  <p>{job.status}</p>
+                  <p className="panelKicker">Research mode</p>
+                  <p>{job.researchMode || 'analysis'}</p>
                 </div>
-                <div className="miniPanel miniPanel-topic">
-                  <p className="panelKicker">Topic</p>
-                  <p>{job.topic}</p>
+                <div className="miniPanel">
+                  <p className="panelKicker">Topic evidence</p>
+                  <p>{job.papers?.length || 0}</p>
                 </div>
+              </div>
+
+              <div className="miniPanel topicBanner">
+                <p className="panelKicker">Topic</p>
+                <p>{job.topic}</p>
               </div>
 
               {job.status === 'awaiting-payment' ? (
@@ -257,7 +303,7 @@ export default function App() {
                   <div className="unlockHeader">
                     <div>
                       <p className="panelKicker">Payment required</p>
-                      <h3>Unlock the final report</h3>
+                      <h3>Unlock the premium dossier</h3>
                     </div>
                     <span className="tokenPill">x402 gate</span>
                   </div>
@@ -270,11 +316,12 @@ export default function App() {
 
               {hasReport ? (
                 <article className="reportBody panelInset stack-lg">
-                  <div className="reportHeader">
+                  <div className="reportLead">
                     <div>
-                      <p className="panelKicker">Final output</p>
+                      <p className="panelKicker">Unlocked markdown</p>
                       <p className="reportTopic">{job.topic}</p>
                     </div>
+                    <div className="reportHint">Readable final summary with references only</div>
                   </div>
 
                   {reportMarkdown ? (
@@ -291,7 +338,7 @@ export default function App() {
                 <div className="emptyState panelInset emptyStateCompact">
                   <h3>Report not revealed yet</h3>
                   <p>
-                    The job exists, but the dossier content is still waiting on the next workflow step.
+                    The job exists, but the dossier content is still waiting for the next workflow step.
                   </p>
                 </div>
               )}
