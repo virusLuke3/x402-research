@@ -2,7 +2,7 @@ export const STACKS_NETWORK = 'testnet';
 export const STACKS_API_BASE = process.env.STACKS_API_BASE || 'https://api.testnet.hiro.so';
 export const STACKS_RECIPIENT = process.env.STACKS_RECIPIENT || 'ST2AUTOSCHOLARTESTNETTREASURY111111111111111';
 export const STACKS_PAYMENT_ASSET = process.env.STACKS_PAYMENT_ASSET || 'STX';
-export const STACKS_PAYMENT_CONTRACT = process.env.STACKS_PAYMENT_CONTRACT || '';
+export const STACKS_PAYMENT_CONTRACT = process.env.STACKS_PAYMENT_CONTRACT || 'ST2AUTOSCHOLARTESTNETTREASURY111111111111111.autoscholar-payments';
 export const STACKS_PAYMENT_MEMO_PREFIX = process.env.STACKS_PAYMENT_MEMO_PREFIX || 'x402-autoscholar';
 
 export function buildStacksPaymentRequest({ jobId, amount, asset }) {

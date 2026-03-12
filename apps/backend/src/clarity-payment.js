@@ -28,9 +28,9 @@ export function buildClarityVerificationPlan(paymentRequest) {
     mode: paymentRequest.contract ? 'clarity-contract-call' : 'clarity-ready-transfer',
     checks: [
       'transaction succeeded on stacks testnet',
-      'recipient or contract principal matches platform treasury/payment contract',
-      'amount matches invoice amount',
-      'memo or job-id binding matches x402 challenge',
+      'contract principal matches autoscholar-payments contract',
+      'public function is pay-invoice',
+      'job-id / amount / asset / memo args match x402 challenge',
       'job has not already been settled'
     ],
     replayKey: paymentRequest.clarity?.replayKey || null

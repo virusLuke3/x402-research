@@ -1,0 +1,12 @@
+[project]
+name = "autoscholar-payments"
+authors = ["virusLuke3", "OpenClaw"]
+description = "Clarity payment contract scaffold for AutoScholar x402 premium unlocks"
+telemetry = false
+cache_dir = ".clarinet"
+requirements = []
+
+[contracts.autoscholar-payments]
+path = "contracts/autoscholar-payments.clar"
+clarity_version = 2
+epoch = 2.5
