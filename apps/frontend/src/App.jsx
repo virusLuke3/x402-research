@@ -110,6 +110,21 @@ export default function App() {
     }
   }
 
+  async function consumeEntitlement() {
+    if (!job?.id) return;
+    setLoading(true);
+    setError('');
+    try {
+      await request(`/api/jobs/${job.id}/consume`, { method: 'POST' });
+      const refreshed = await request(`/api/jobs/${job.id}`);
+      setJob(refreshed);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   const reportMarkdown = job?.report?.markdown?.trim();
   const topicLength = topic.trim().length;
   const hasReport = Boolean(job?.report);
@@ -339,6 +354,20 @@ export default function App() {
               {hasReport ? (
                 <article className="reportBody panelInset stack-lg">
                   <div className="reportLead"><div><p className="panelKicker">Unlocked markdown</p><p className="reportTopic">{job.topic}</p></div><div className="reportHint">Planner → reviewer → final writer dossier path</div></div>
+                  <div className="entitlementBar">
+                    <div>
+                      <p className="panelKicker">Entitlement state</p>
+                      <p className="reportHint">Current invoice state: {reportMeta.contractState}</p>
+                    </div>
+                    <button
+                      type="button"
+                      className="secondaryButton"
+                      onClick={consumeEntitlement}
+                      disabled={loading || reportMeta.contractState === 'consumed'}
+                    >
+                      {reportMeta.contractState === 'consumed' ? 'Entitlement consumed' : 'Consume entitlement'}
+                    </button>
+                  </div>
                   {reportMarkdown ? <div className="markdownReport"><ReactMarkdown remarkPlugins={[remarkGfm]}>{reportMarkdown}</ReactMarkdown></div> : <p className="muted">The report content is not available yet.</p>}
                 </article>
               ) : (

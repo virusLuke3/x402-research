@@ -335,10 +335,10 @@ async function retrieveEvidence(topic, researchMode, topicProfile) {
 
   const filteredExternal = external.filter((item) => {
     if (topicProfile.key === 'commerce') {
-      return item.evidenceClass === 'topic-core' || /x402|stacks|agent|commerce|payment|invoice|entitlement|sbtc|usdcx/i.test(`${item.title} ${item.summary}`);
+      return (item.evidenceClass === 'topic-core' || /x402|stacks|agent|commerce|payment|invoice|entitlement|sbtc|usdcx|capability/i.test(`${item.title} ${item.summary}`)) && item.relevanceScore >= 5;
     }
     if (topicProfile.key === 'general') {
-      return item.evidenceClass !== 'off-topic';
+      return item.evidenceClass !== 'off-topic' && item.relevanceScore >= 4;
     }
     return item.evidenceClass !== 'off-topic' || item.relevanceScore >= 4;
   });
