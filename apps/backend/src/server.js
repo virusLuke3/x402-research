@@ -402,8 +402,20 @@ function buildFallbackMarkdownReport(topic, researchMode, topicProfile, evidence
   const evidenceRows = safeArray(evidenceBundle.topicEvidence, []).map((paper, index) => {
     const citation = topicCitations[index];
     const prefix = citation?.url ? `- **[${paper.title}](${citation.url})**` : `- **${paper.title}**`;
-    const meta = [formatDate(paper.published), safeArray(paper.authors, []).join(', '), paper.sourceType].filter(Boolean).join(' · ');
-    return `${prefix}${meta ? ` — ${meta}` : ''}\n  - ${truncate(paper.summary, 420)}`;
+    const meta = [formatDate(paper.published), safeArray(paper.authors, []).join(', '), paper.sourceType, paper.evidenceClass].filter(Boolean).join(' · ');
+    return `${prefix}${meta ? ` — ${meta}` : ''}\n  - ${truncate(paper.summary, 520)}`;
+  });
+  const evidenceHighlights = safeArray(evidenceBundle.topicEvidence, []).slice(0, 5).map((paper, index) => {
+    const citation = topicCitations[index];
+    const titleLine = citation?.url ? `### ${index + 1}. [${paper.title}](${citation.url})` : `### ${index + 1}. ${paper.title}`;
+    return [
+      titleLine,
+      `- **作者 / 时间**：${[safeArray(paper.authors, []).join(', '), formatDate(paper.published)].filter(Boolean).join(' · ') || '未提供'}`,
+      `- **证据类型**：${paper.sourceType || 'unknown'} / ${paper.evidenceClass || 'unknown'}`,
+      `- **为什么重要**：${truncate(paper.summary, 380)}`,
+      `- **对本主题的启发**：${truncate((safeArray(llmResult.keyFindings, [])[index % Math.max(safeArray(llmResult.keyFindings, []).length, 1)] || llmResult.consensus || '该证据为当前主题提供了可直接借鉴的分析线索。'), 220)}`,
+      ''
+    ].join('\n');
   });
   const sections = [
     title,
@@ -414,10 +426,12 @@ function buildFallbackMarkdownReport(topic, researchMode, topicProfile, evidence
     '## 2. 研究范围与方法',
     llmResult.methodology || `基于 ${topicProfile.label} 的主题证据检索、筛选和综合分析。`,
     '',
-    '## 3. 核心发现',
+    '## 3. 核心文献解析',
+    ...(evidenceHighlights.length ? evidenceHighlights : ['当前尚缺少足够高质量证据用于展开逐篇解析。']),
+    '## 4. 核心发现',
     ...safeArray(llmResult.keyFindings, []).map((item) => `- ${item}`),
     '',
-    '## 4. 综合分析',
+    '## 5. 技术综述 / 现状分析',
     llmResult.consensus || '当前证据已支持形成初步综合判断，但仍需结合更多高质量外部论文继续扩展。',
     ''
   ];
@@ -453,24 +467,24 @@ function buildFallbackMarkdownReport(topic, researchMode, topicProfile, evidence
   }
 
   if (evidenceRows.length) {
-    sections.push('## 8. 证据综述');
+    sections.push('## 9. 证据综述');
     sections.push(...evidenceRows);
     sections.push('');
   }
 
   if (safeArray(llmResult.limitations, []).length) {
-    sections.push('## 9. 局限性');
+    sections.push('## 10. 局限性');
     sections.push(...safeArray(llmResult.limitations, []).map((item) => `- ${item}`));
     sections.push('');
   }
 
   if (safeArray(llmResult.nextResearchActions, []).length) {
-    sections.push('## 10. 后续研究方向');
+    sections.push('## 11. 后续研究方向');
     sections.push(...safeArray(llmResult.nextResearchActions, []).map((item) => `- ${item}`));
     sections.push('');
   }
 
-  sections.push('## 11. 参考文献');
+  sections.push('## 12. 参考文献');
   if (topicCitations.length) {
     sections.push(...topicCitations.map((citation, index) => buildMarkdownReferenceLine(citation, index)));
   } else {
@@ -492,15 +506,26 @@ async function generateAcademicMarkdownReport(topic, researchMode, topicProfile,
     published: formatDate(paper.published),
     sourceType: paper.sourceType,
     evidenceClass: paper.evidenceClass,
+    category: paper.category,
+    relevanceScore: paper.relevanceScore,
     url: buildCitationUrl(paper),
-    abstract: truncate(paper.summary, 900)
+    abstract: truncate(paper.summary, 1200)
+  }));
+  const evidenceStats = buildEvidenceStats(evidenceBundle.topicEvidence);
+  const parliamentSummary = safeArray(llmResult.parliament, []).map((item, index) => ({
+    rank: index + 1,
+    agent: item.agent,
+    role: item.role,
+    stance: item.stance
   }));
 
   const systemPrompt = [
     '你是一位资深学术文献综述撰写专家。',
-    '你的任务是把研究证据和 AI 评审结论整合为一篇成熟、完整、可直接阅读的 Markdown 研究报告。',
-    '写作风格参考 Full-Workflow Multi-Agent Literature Review 的报告阶段：先审查，再综合，最后输出结构化长文。',
-    '必须使用严谨中文，避免空话，避免营销语，避免虚构未提供的论文数量、实验结果或引用。',
+    '你的任务是把研究证据、AI Parliament 讨论结果与主题判断整合为一篇成熟、完整、逻辑严密、可直接阅读的 Markdown 研究报告。',
+    '写作风格参考 Full-Workflow Multi-Agent Literature Review：先评审证据，再综合共识与分歧，最后输出结构化长报告。',
+    '必须使用严谨中文，避免空话、营销语、模板化套话。',
+    '严禁虚构未提供的论文数量、实验结果、引用关系或链上实现细节。',
+    '报告必须体现：证据强弱、共识与分歧、研究边界、下一步建议。',
     '直接输出 Markdown，不要输出 JSON，不要输出代码块包裹的 Markdown。'
   ].join(' ');
 
@@ -510,16 +535,21 @@ async function generateAcademicMarkdownReport(topic, researchMode, topicProfile,
     `主题领域：${topicProfile.label}`,
     '',
     '写作要求：',
-    '- 输出一份成熟的学术风格研究报告，而不是短摘要。',
-    '- 报告必须包含清晰标题层级，至少包含：执行摘要、核心文献解析、技术综述/现状分析、综合判断或实施建议、风险与局限、参考文献。',
+    '- 输出一份完整的学术风格研究报告，而不是短摘要。',
+    '- 报告至少包含这些部分：执行摘要、研究范围与方法、核心文献解析、技术综述/现状分析、综合判断与实施建议、风险与局限、后续研究方向、参考文献。',
+    '- 在“核心文献解析”中，优先解析最相关的 3-5 条证据，分别说明：它解决什么问题、对当前主题有什么价值、局限在哪里。',
+    '- 在“技术综述/现状分析”中，要综合不同证据的共性、差异、成熟度，而不是把摘要逐条复述。',
+    '- 在“综合判断与实施建议”中，要给出面向项目落地的可执行建议。',
     '- 参考文献部分必须引用下面提供的证据；若存在 url，则用 Markdown 链接。',
-    '- 不要讨论前端、系统配置、x402 支付流程细节；除非必要，只需一句话说明这是报告解锁机制而非研究主题。',
+    '- 如果主题与 x402/Stacks 无直接学术关系，只能将其简要说明为支付/解锁基础设施，不要喧宾夺主。',
     '- 不要声称审查了 100+ 篇论文，除非提供的数据里确实有那么多。',
-    '- 如果证据不足，要明确指出证据边界和结论强度。',
+    '- 如果证据不足，要明确写出证据边界与结论强度。',
+    '- 整体输出篇幅要明显高于普通摘要，尽量像成熟综述而不是产品说明。',
     '',
     'AI Parliament 综合结果：',
     JSON.stringify({
       executiveSummary: llmResult.executiveSummary,
+      researchQuestion: llmResult.researchQuestion,
       methodology: llmResult.methodology,
       keyFindings: llmResult.keyFindings,
       implications: llmResult.implications,
@@ -529,14 +559,21 @@ async function generateAcademicMarkdownReport(topic, researchMode, topicProfile,
       nextResearchActions: llmResult.nextResearchActions,
       scenarios: llmResult.scenarios,
       timeline: llmResult.timeline,
-      domainSections: llmResult.domainSections
+      domainSections: llmResult.domainSections,
+      parliament: parliamentSummary,
+      quality: llmResult.quality
     }, null, 2),
+    '',
+    '证据统计：',
+    JSON.stringify(evidenceStats, null, 2),
     '',
     '可用主题证据：',
     JSON.stringify(evidenceForPrompt, null, 2),
     '',
     '参考文献元数据：',
-    JSON.stringify(topicCitations, null, 2)
+    JSON.stringify(topicCitations, null, 2),
+    '',
+    '特别提醒：请像系统性综述写作者一样组织报告，既要写“看到了什么”，也要写“意味着什么”“还缺什么”“下一步怎么做”。'
   ].join('\n');
 
   try {
