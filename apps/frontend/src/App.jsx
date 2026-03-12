@@ -29,7 +29,7 @@ function SectionCard({ title, children }) {
 }
 
 export default function App() {
-  const [topic, setTopic] = useState('Produce a research-grade technical report on x402 protocol design and Stacks-based settlement for agent-to-agent payments, covering USDCx, sBTC, SIP-10 asset flow, payment challenges, and the architecture of a multi-agent service network.');
+  const [topic, setTopic] = useState('预测未来3年AI agent economies会如何发展：包括支付基础设施、自治工具市场、以及machine-to-machine commerce的演化路径。');
   const [job, setJob] = useState(null);
   const [jobs, setJobs] = useState([]);
   const [config, setConfig] = useState(null);
@@ -55,7 +55,6 @@ export default function App() {
     event.preventDefault();
     setLoading(true);
     setError('');
-
     try {
       const created = await request('/api/research', {
         method: 'POST',
@@ -74,7 +73,6 @@ export default function App() {
     if (!job?.id) return;
     setLoading(true);
     setError('');
-
     try {
       const completed = await request(`/api/jobs/${job.id}/pay`, {
         method: 'POST',
@@ -95,37 +93,36 @@ export default function App() {
   return (
     <div className="page">
       <header className="hero">
-        <span className="badge">AutoScholar V5 · x402 + Stacks Evidence Engine</span>
-        <h1>The x402-Powered Agentic Research Network</h1>
+        <span className="badge">AutoScholar V6 · AI Parliament + x402/Stacks Paywall</span>
+        <h1>Topic-Agnostic Research Agent, x402/Stacks-Native Premium Unlock</h1>
         <p>
-          This iteration upgrades the project into an x402 / Stacks evidence engine:
-          local protocol knowledge, mixed retrieval, evidence-class labeling, committee review,
-          and protocol-oriented research synthesis for agent payments.
+          In V6, the research topic is independent from the payment rail. The system can study open questions
+          like future forecasts, while x402 + Stacks remains the infrastructure used to monetize premium synthesis,
+          debate logs, and specialist outputs.
         </p>
       </header>
 
       <main className="grid">
         <section className="card">
-          <h2>Submit research request</h2>
+          <h2>Submit research topic</h2>
           <form onSubmit={createJob} className="stack">
             <textarea value={topic} onChange={(e) => setTopic(e.target.value)} rows={7} />
-            <button disabled={loading}>{loading ? 'Working…' : 'Create manager job'}</button>
+            <button disabled={loading}>{loading ? 'Working…' : 'Create research job'}</button>
           </form>
           {error ? <p className="error">{error}</p> : null}
         </section>
 
         <section className="card">
-          <h2>Runtime config</h2>
+          <h2>System config</h2>
           {!config ? <p>Loading config…</p> : (
             <ul className="list compact">
               <li>API base: {config.apiBase}</li>
-              <li>Paper source: {config.paperSource}</li>
               <li>LLM model: {config.model}</li>
-              <li>LLM configured: {String(config.llmConfigured)}</li>
               <li>Provider: {config.providerBaseUrl}</li>
-              <li>Payment asset: {config.paymentAsset}</li>
-              <li>Payment amount: {config.paymentAmount}</li>
+              <li>Evidence source: {config.paperSource}</li>
               <li>Orchestration: {config.orchestrationMode}</li>
+              <li>Payment standard: {config.paymentRail?.challengeStandard}</li>
+              <li>Settlement layer: {config.paymentRail?.settlementLayer}</li>
             </ul>
           )}
         </section>
@@ -145,12 +142,12 @@ export default function App() {
                   <p>{job.topic}</p>
                 </div>
                 <div>
-                  <p><strong>Search query</strong></p>
-                  <p>{job.searchQuery}</p>
+                  <p><strong>Research mode</strong></p>
+                  <p>{job.researchMode}</p>
                 </div>
                 <div>
-                  <p><strong>Manager</strong></p>
-                  <p>{job.orchestration?.manager}</p>
+                  <p><strong>Search query</strong></p>
+                  <p>{job.searchQuery}</p>
                 </div>
                 <div>
                   <p><strong>Meeting status</strong></p>
@@ -158,30 +155,33 @@ export default function App() {
                 </div>
               </div>
 
-              {job.llm?.error ? (
-                <p className="error">
-                  LLM fallback engaged: {job.llm.error}
-                </p>
-              ) : null}
-
-              {job.orchestration?.specialists?.length ? (
-                <SectionCard title="Agent committee">
-                  <div className="pillRow">
-                    {job.orchestration.specialists.map((agent) => (
-                      <span key={agent} className="pill">{agent}</span>
-                    ))}
-                  </div>
-                </SectionCard>
-              ) : null}
+              <SectionCard title="Layer separation">
+                <ul className="list compact">
+                  <li><strong>Research layer:</strong> retrieve papers, debate, and synthesize the user’s topic.</li>
+                  <li><strong>Payment layer:</strong> x402 challenge + Stacks settlement narrative unlocks premium report generation.</li>
+                </ul>
+              </SectionCard>
 
               {job.papers?.length ? (
-                <SectionCard title="Retrieved paper shortlist">
+                <SectionCard title="Topic evidence">
                   <ul className="list compact">
                     {job.papers.map((paper) => (
                       <li key={paper.id}>
                         <strong>{paper.title}</strong>
-                        <div>{paper.authors?.join(', ') || 'Unknown authors'}</div>
-                        <div>{paper.published} · relevance score {paper.relevanceScore}</div>
+                        <div>{paper.sourceType} · {paper.evidenceClass} · relevance {paper.relevanceScore}</div>
+                      </li>
+                    ))}
+                  </ul>
+                </SectionCard>
+              ) : null}
+
+              {job.paymentEvidence?.length ? (
+                <SectionCard title="x402 / Stacks payment-rail evidence">
+                  <ul className="list compact">
+                    {job.paymentEvidence.map((paper) => (
+                      <li key={paper.id}>
+                        <strong>{paper.title}</strong>
+                        <div>{paper.sourceType} · {paper.evidenceClass}</div>
                       </li>
                     ))}
                   </ul>
@@ -190,16 +190,16 @@ export default function App() {
 
               {job.status === 'awaiting-payment' ? (
                 <div className="paymentBox">
-                  <h3>x402 payment challenge</h3>
+                  <h3>x402 premium unlock</h3>
                   <p>{job.paymentRequest.reason}</p>
                   <ul className="list compact">
                     <li>Asset: {job.paymentRequest.asset}</li>
                     <li>Amount: {job.paymentRequest.amount}</li>
                     <li>Recipient: {job.paymentRequest.recipient}</li>
-                    <li>Specialist: {job.paymentRequest.specialist}</li>
+                    <li>Challenge: {job.paymentRequest.challenge}</li>
                   </ul>
                   <button onClick={payAndComplete} disabled={loading}>
-                    {loading ? 'Processing payment…' : 'Simulate chain payment and run committee meeting'}
+                    {loading ? 'Processing payment…' : 'Pay via x402 + Stacks flow and unlock report'}
                   </button>
                 </div>
               ) : null}
@@ -221,13 +221,13 @@ export default function App() {
                     </SectionCard>
                   </div>
 
-                  <SectionCard title="x402 / Stacks protocol focus">
+                  <SectionCard title="Payment rail (fixed infrastructure layer)">
                     <ul className="list compact">
-                      <li>Challenge standard: {job.report.protocolFocus?.challengeStandard}</li>
-                      <li>Settlement layer: {job.report.protocolFocus?.settlementLayer}</li>
-                      <li>Settlement assets: {(job.report.protocolFocus?.settlementAssets || []).join(', ')}</li>
-                      <li>Authorization model: {job.report.protocolFocus?.authorizationModel}</li>
-                      <li>Specialist pattern: {job.report.protocolFocus?.specialistPattern}</li>
+                      <li>Challenge standard: {job.report.paymentRail?.challengeStandard}</li>
+                      <li>Settlement layer: {job.report.paymentRail?.settlementLayer}</li>
+                      <li>Settlement assets: {(job.report.paymentRail?.settlementAssets || []).join(', ')}</li>
+                      <li>Authorization model: {job.report.paymentRail?.authorizationModel}</li>
+                      <li>Unlock rule: {job.report.paymentRail?.queryUnlock}</li>
                     </ul>
                   </SectionCard>
 
@@ -244,17 +244,30 @@ export default function App() {
                     </SectionCard>
                   </div>
 
-                  <div className="columns">
-                    <SectionCard title="Limitations">
+                  {(job.report.scenarios || []).length ? (
+                    <SectionCard title="Forecast scenarios">
+                      <div className="debateList">
+                        {job.report.scenarios.map((item, index) => (
+                          <div key={`${item.name}-${index}`} className="debateCard">
+                            <strong>{item.name}</strong>
+                            <div className="muted">Probability: {item.probability}</div>
+                            <p>{item.outlook}</p>
+                            <p><span className="muted">Driver:</span> {item.driver}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </SectionCard>
+                  ) : null}
+
+                  {(job.report.timeline || []).length ? (
+                    <SectionCard title="Timeline outlook">
                       <ul className="list compact">
-                        {(job.report.limitations || []).map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}
+                        {job.report.timeline.map((item, index) => (
+                          <li key={`${item.window}-${index}`}><strong>{item.window}</strong> — {item.expectation}</li>
+                        ))}
                       </ul>
                     </SectionCard>
-                    <SectionCard title="Novelty assessment">
-                      <p>{job.report.noveltyAssessment}</p>
-                      <p className="muted"><strong>Consensus:</strong> {job.report.consensus}</p>
-                    </SectionCard>
-                  </div>
+                  ) : null}
 
                   <div className="columns">
                     <SectionCard title="Research quality">
@@ -262,7 +275,7 @@ export default function App() {
                         <li>Evidence coverage: {job.report.quality?.evidenceCoverage}</li>
                         <li>Synthesis mode: {job.report.quality?.synthesisMode}</li>
                         <li>Confidence: {job.report.quality?.confidence}</li>
-                        <li>Protocol-core: {job.report.quality?.evidenceStats?.['protocol-core'] ?? 0}</li>
+                        <li>Forecast framework: {job.report.quality?.evidenceStats?.['forecast-framework'] ?? 0}</li>
                         <li>Supporting: {job.report.quality?.evidenceStats?.supporting ?? 0}</li>
                         <li>Off-topic: {job.report.quality?.evidenceStats?.['off-topic'] ?? 0}</li>
                       </ul>
@@ -276,9 +289,9 @@ export default function App() {
                     </SectionCard>
                   </div>
 
-                  <SectionCard title="Multi-agent meeting notes">
+                  <SectionCard title="AI Parliament meeting notes">
                     <div className="debateList">
-                      {(job.report.agentDebate || []).map((entry, index) => (
+                      {(job.report.parliament || []).map((entry, index) => (
                         <div key={`${entry.agent}-${index}`} className="debateCard">
                           <strong>{entry.agent}</strong>
                           <div className="muted">{entry.role}</div>
@@ -288,34 +301,44 @@ export default function App() {
                     </div>
                   </SectionCard>
 
-                  <SectionCard title="Evidence table">
+                  <SectionCard title="Topic evidence table">
                     <div className="evidenceTable">
                       {(job.report.evidenceTable || []).map((item, index) => (
                         <div key={`${item.title}-${index}`} className="evidenceRow">
                           <strong>{item.title}</strong>
-                          <p><span className="muted">Why it matters:</span> {item.whyItMatters}</p>
-                          <p><span className="muted">Evidence class:</span> {item.protocolLens}</p>
+                          <p><span className="muted">Evidence class:</span> {item.evidenceClass}</p>
                           <p><span className="muted">Source type:</span> {item.sourceType}</p>
+                          <p><span className="muted">Why it matters:</span> {item.whyItMatters}</p>
                           <p><span className="muted">Evidence:</span> {item.evidence}</p>
                         </div>
                       ))}
                     </div>
                   </SectionCard>
 
+                  <SectionCard title="Payment-rail evidence table">
+                    <div className="evidenceTable">
+                      {(job.report.paymentEvidenceTable || []).map((item, index) => (
+                        <div key={`${item.title}-${index}`} className="evidenceRow">
+                          <strong>{item.title}</strong>
+                          <p><span className="muted">Evidence class:</span> {item.evidenceClass}</p>
+                          <p><span className="muted">Source type:</span> {item.sourceType}</p>
+                          <p><span className="muted">Why it matters:</span> {item.whyItMatters}</p>
+                          <p><span className="muted">Evidence:</span> {item.evidence}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </SectionCard>
+
+                  <SectionCard title="x402 / Stacks payment flow">
+                    <ul className="list compact">
+                      {(job.report.paymentFlow || []).map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}
+                    </ul>
+                  </SectionCard>
+
                   <SectionCard title="Extracted assets">
                     <ul className="list compact">
                       {(job.report.extractedAssets || []).map((asset) => (
                         <li key={asset.id}>{asset.title} — {asset.description}</li>
-                      ))}
-                    </ul>
-                  </SectionCard>
-
-                  <SectionCard title="Citations">
-                    <ul className="list compact">
-                      {(job.report.citations || []).map((item) => (
-                        <li key={item.id}>
-                          <strong>{item.ref}</strong> {item.title} — {item.authors?.join(', ') || 'Unknown authors'} ({item.published})
-                        </li>
                       ))}
                     </ul>
                   </SectionCard>

@@ -23,27 +23,42 @@ app.use(cors({ origin: FRONTEND_ORIGIN }));
 app.use(express.json());
 
 const jobs = new Map();
-const knowledgeBase = JSON.parse(fs.readFileSync(KB_PATH, 'utf8'));
+const paymentKnowledgeBase = JSON.parse(fs.readFileSync(KB_PATH, 'utf8'));
+
+const PAYMENT_RAIL = {
+  challengeStandard: 'x402 / HTTP 402 Payment Required',
+  settlementLayer: 'Stacks',
+  settlementAssets: ['USDCx', 'sBTC'],
+  authorizationModel: 'payment-gated specialist access after verified settlement',
+  specialistPattern: 'manager + paid molbot + post-payment capability release',
+  queryUnlock: 'Research query creation is free; report synthesis and specialist assets unlock after x402 payment.'
+};
+
+const FORECAST_FRAMEWORK = [
+  {
+    id: 'fw-agent-001',
+    title: 'Scenario planning for AI agent economies',
+    summary: 'Forecast agent economies through scenario planning rather than point predictions. Track infrastructure maturity, pricing standards, trust boundaries, and discoverability of paid tools.',
+    keywords: ['forecast', 'agent economies', 'scenario planning', 'tool markets'],
+    sourceType: 'local-framework',
+    category: 'forecast-framework',
+    published: '2026-03-12',
+    authors: ['AutoScholar Forecast Framework']
+  },
+  {
+    id: 'fw-agent-002',
+    title: 'Market structure signals for machine-to-machine commerce',
+    summary: 'Key variables include payment rails, identity, settlement confirmation, capability release, and cross-agent reputation. Early markets often emerge as narrow specialist networks before broad autonomous economies.',
+    keywords: ['machine-to-machine commerce', 'market structure', 'payments', 'reputation'],
+    sourceType: 'local-framework',
+    category: 'forecast-framework',
+    published: '2026-03-12',
+    authors: ['AutoScholar Forecast Framework']
+  }
+];
 
 function makeId(prefix = 'job') {
   return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
-}
-
-function isProtocolTopic(topic) {
-  return /x402|stacks|usdcx|sbtc|sip-?10|clarity|bitcoin|payment challenge|agent payments/i.test(String(topic || ''));
-}
-
-function extractQuery(topic) {
-  const cleaned = String(topic || '')
-    .replace(/summarize|latest|papers|paper|include|core|architecture|diagrams|diagram|research|report/gi, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  if (isProtocolTopic(topic)) {
-    return cleaned || 'x402 Stacks USDCx sBTC agent payments';
-  }
-
-  return cleaned || 'ZK Rollup';
 }
 
 function formatDate(value) {
@@ -57,54 +72,79 @@ function truncate(text, max = 260) {
   return value.length > max ? `${value.slice(0, max)}...` : value;
 }
 
-function scorePaperRelevance(topic, paper, index) {
-  const topicTerms = String(topic || '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
-  const haystack = `${paper.title} ${paper.summary} ${(paper.keywords || []).join(' ')}`.toLowerCase();
-  const termHits = topicTerms.filter((term) => haystack.includes(term)).length;
-  const recencyBoost = paper.published?.startsWith('2025') || paper.published?.startsWith('2026') ? 2 : 0;
-  const categoryBoost = paper.category === 'protocol-core' ? 4 : paper.category === 'supporting' ? 2 : 0;
-  const positionBoost = Math.max(0, 5 - index);
-  return termHits + recencyBoost + categoryBoost + positionBoost;
+function deriveResearchMode(topic) {
+  const text = String(topic || '').toLowerCase();
+  if (/(predict|forecast|future|3 years|5 years|next decade|outlook|scenario|预测|未来|三年|几年|趋势|演化路径)/i.test(text)) {
+    return 'forecast';
+  }
+  if (/(survey|literature review|systematic review|综述|文献综述|系统综述)/i.test(text)) {
+    return 'literature-review';
+  }
+  return 'analysis';
 }
 
-function classifyEvidence(topic, paper) {
-  const haystack = `${paper.title} ${paper.summary} ${(paper.keywords || []).join(' ')}`.toLowerCase();
-  const strongTerms = ['x402', 'stacks', 'usdcx', 'sbtc', 'payment challenge', 'sip-10', 'agent payments'];
-  const hits = strongTerms.filter((term) => haystack.includes(term)).length;
+function cleanTopicForSearch(topic) {
+  return String(topic || '')
+    .replace(/predict the future of/gi, 'future outlook for')
+    .replace(/over the next \d+ years?/gi, 'near term outlook')
+    .replace(/how protocols like x402 and stacks could shape/gi, 'payment infrastructure and machine-to-machine commerce')
+    .replace(/research-grade|technical|report|analysis/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
-  if (paper.category === 'protocol-core' || hits >= 3) {
-    return 'protocol-core';
+function extractQuery(topic, mode) {
+  const cleaned = cleanTopicForSearch(topic);
+  if (mode === 'forecast') {
+    return cleaned || 'AI agent economies payment infrastructure autonomous tool markets';
   }
+  return cleaned || 'agent systems';
+}
 
-  if (hits >= 1 || /payment|settlement|authorization|bitcoin|agent/i.test(haystack)) {
-    return 'supporting';
-  }
+function scoreEvidence(topic, item, index) {
+  const topicTerms = String(topic || '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  const haystack = `${item.title} ${item.summary} ${(item.keywords || []).join(' ')}`.toLowerCase();
+  const termHits = topicTerms.filter((term) => haystack.includes(term)).length;
+  const recencyBoost = item.published?.startsWith('2025') || item.published?.startsWith('2026') ? 2 : 0;
+  const categoryBoost = item.category === 'protocol-core' ? 3 : item.category === 'forecast-framework' ? 2 : 0;
+  return termHits + recencyBoost + categoryBoost + Math.max(0, 5 - index);
+}
 
+function classifyEvidence(topic, item) {
+  const haystack = `${item.title} ${item.summary} ${(item.keywords || []).join(' ')}`.toLowerCase();
+  if (item.category === 'protocol-core') return 'protocol-core';
+  if (item.category === 'forecast-framework') return 'forecast-framework';
+  if (/agent|market|payment|commerce|forecast|future|tool/i.test(haystack)) return 'supporting';
   return 'off-topic';
 }
 
-function loadKnowledgeBaseEntries(topic) {
-  const entries = knowledgeBase.entries || [];
-  return entries.map((entry, index) => ({
+function buildPaymentRailEvidence(topic) {
+  return (paymentKnowledgeBase.entries || []).map((entry, index) => ({
     id: entry.id,
     title: entry.title,
     summary: entry.summary,
     published: '2026-03-12',
-    authors: ['AutoScholar Local Knowledge Base'],
+    authors: ['AutoScholar Payment Rail KB'],
     keywords: entry.keywords || [],
     sourceType: entry.sourceType || 'local-kb',
-    category: entry.category || 'supporting',
-    relevanceScore: scorePaperRelevance(topic, entry, index),
+    category: entry.category || 'protocol-core',
+    relevanceScore: scoreEvidence(topic, entry, index),
+    evidenceClass: classifyEvidence(topic, entry)
+  }));
+}
+
+function buildForecastFrameworkEvidence(topic) {
+  return FORECAST_FRAMEWORK.map((entry, index) => ({
+    ...entry,
+    relevanceScore: scoreEvidence(topic, entry, index),
     evidenceClass: classifyEvidence(topic, entry)
   }));
 }
 
 async function fetchArxivPapers(query, topic) {
-  const url = `https://export.arxiv.org/api/query?search_query=all:${encodeURIComponent(query)}&start=0&max_results=6&sortBy=relevance&sortOrder=descending`;
+  const url = `https://export.arxiv.org/api/query?search_query=all:${encodeURIComponent(query)}&start=0&max_results=8&sortBy=relevance&sortOrder=descending`;
   const response = await fetch(url, {
-    headers: {
-      'User-Agent': 'AutoScholar/0.5 (hackathon research demo)'
-    }
+    headers: { 'User-Agent': 'AutoScholar/0.6 (hackathon research demo)' }
   });
 
   if (!response.ok) {
@@ -127,51 +167,57 @@ async function fetchArxivPapers(query, topic) {
       published,
       authors,
       sourceType: 'arxiv',
-      category: 'external'
+      category: 'external',
+      keywords: []
     };
-
     return {
       ...paper,
-      relevanceScore: scorePaperRelevance(topic || query, paper, index),
-      evidenceClass: classifyEvidence(topic || query, paper)
+      relevanceScore: scoreEvidence(topic, paper, index),
+      evidenceClass: classifyEvidence(topic, paper)
     };
   }).filter((paper) => paper.title);
 }
 
-async function retrieveEvidence(query, topic) {
-  const kbEntries = isProtocolTopic(topic) ? loadKnowledgeBaseEntries(topic) : [];
-  let externalEntries = [];
-
+async function retrieveEvidence(topic, mode) {
+  const query = extractQuery(topic, mode);
+  let external = [];
   try {
-    externalEntries = await fetchArxivPapers(query, topic);
+    external = await fetchArxivPapers(query, topic);
   } catch {
-    externalEntries = [];
+    external = [];
   }
 
-  const combined = [...kbEntries, ...externalEntries]
-    .sort((a, b) => b.relevanceScore - a.relevanceScore)
-    .slice(0, 8);
+  const forecastFramework = mode === 'forecast' ? buildForecastFrameworkEvidence(topic) : [];
+  const paymentRail = buildPaymentRailEvidence(topic);
 
+  const researchEvidence = [...external, ...forecastFramework]
+    .sort((a, b) => b.relevanceScore - a.relevanceScore)
+    .slice(0, 6);
+
+  const paymentEvidence = paymentRail
+    .sort((a, b) => b.relevanceScore - a.relevanceScore)
+    .slice(0, 3);
+
+  const combined = [...researchEvidence, ...paymentEvidence];
   if (combined.length === 0) {
     throw new Error('no evidence retrieved');
   }
 
-  return combined;
+  return {
+    query,
+    researchEvidence,
+    paymentEvidence,
+    combined
+  };
 }
 
 function parseJSONContent(content) {
-  if (typeof content !== 'string') {
-    return null;
-  }
-
+  if (typeof content !== 'string') return null;
   try {
     return JSON.parse(content);
   } catch {
     const fenced = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)?.[1];
-    if (!fenced) {
-      return null;
-    }
-
+    if (!fenced) return null;
     try {
       return JSON.parse(fenced);
     } catch {
@@ -184,87 +230,34 @@ function safeArray(value, fallback = []) {
   return Array.isArray(value) ? value : fallback;
 }
 
-function buildDeterministicEvidenceTable(papers) {
-  return papers.slice(0, 5).map((paper, index) => ({
-    paperId: paper.id,
-    title: paper.title,
-    whyItMatters: `Top-ranked evidence candidate #${index + 1} with relevance score ${paper.relevanceScore}.`,
-    evidence: truncate(paper.summary, 220),
-    protocolLens: paper.evidenceClass,
-    sourceType: paper.sourceType || 'unknown'
-  }));
-}
-
-function buildEvidenceStats(papers) {
-  const stats = { 'protocol-core': 0, supporting: 0, 'off-topic': 0 };
-  for (const paper of papers) {
-    const key = paper.evidenceClass || 'off-topic';
+function buildEvidenceStats(items) {
+  const stats = { 'protocol-core': 0, 'forecast-framework': 0, supporting: 0, 'off-topic': 0 };
+  for (const item of items) {
+    const key = item.evidenceClass || 'off-topic';
     stats[key] = (stats[key] || 0) + 1;
   }
   return stats;
 }
 
-function buildAgentDebate(topic, papers, planner = {}, skeptic = {}, synthesizer = {}) {
-  const lead = papers[0];
-  const second = papers[1];
-  const third = papers[2];
-
-  return [
-    {
-      agent: 'Planner Agent',
-      role: 'Scope and decomposition',
-      stance: planner.scope || `The core question is: ${topic}. We should prioritize protocol-core evidence around x402 payment semantics, Stacks settlement, and post-payment capability release.`
-    },
-    {
-      agent: 'Retriever Agent',
-      role: 'Evidence gathering',
-      stance: planner.retrievalPlan || (lead ? `The strongest retrieval candidate is “${lead.title}”, classified as ${lead.evidenceClass} and sourced from ${lead.sourceType}.` : 'No strong retrieval candidate was found.')
-    },
-    {
-      agent: 'Skeptic Agent',
-      role: 'Challenge weak claims',
-      stance: skeptic.challenge || (second ? `Avoid extrapolating beyond the evidence class of “${second.title}”, which is only ${second.evidenceClass}.` : 'Claims should be kept conservative because evidence coverage is thin.')
-    },
-    {
-      agent: 'Synthesis Agent',
-      role: 'Cross-paper synthesis',
-      stance: synthesizer.consensus || (third ? `A reasonable synthesis is that the project needs protocol-core evidence about x402 and Stacks, with “${third.title}” serving as ${third.evidenceClass} support.` : 'Synthesis should stay at the level of recurring payment architecture motifs and not overstate consensus.')
-    }
-  ];
+function buildEvidenceTable(items) {
+  return items.slice(0, 6).map((item, index) => ({
+    paperId: item.id,
+    title: item.title,
+    whyItMatters: `Evidence candidate #${index + 1} with relevance score ${item.relevanceScore}.`,
+    evidence: truncate(item.summary, 220),
+    evidenceClass: item.evidenceClass,
+    sourceType: item.sourceType
+  }));
 }
 
-function buildLocalFallbackSummary(topic, papers, reason = 'LLM unavailable') {
-  const topPapers = papers.slice(0, 5);
-  return {
-    mode: 'fallback',
-    executiveSummary: `${reason}. Returning a locally generated research brief for ${topic}.`,
-    researchQuestion: topic,
-    methodology: 'Fallback synthesis from mixed evidence retrieval, local x402/Stacks knowledge base scoring, and deterministic manager heuristics.',
-    keyFindings: topPapers.map((paper) => `${paper.title} [${paper.evidenceClass}] — ${truncate(paper.summary, 180)}`),
-    implications: [
-      'Local protocol knowledge can stabilize demos even when external research retrieval is sparse.',
-      'Judge-facing output should favor protocol-core evidence over generic neighboring literature.',
-      'A mixed local/external retrieval path is better aligned with x402 and Stacks than arXiv-only search.'
-    ],
-    limitations: [
-      'No model-driven cross-paper synthesis was produced.',
-      'Local knowledge base entries are curated scaffolding, not third-party peer-reviewed sources.'
-    ],
-    evidenceTable: buildDeterministicEvidenceTable(topPapers),
-    agentDebate: buildAgentDebate(topic, topPapers),
-    consensus: 'Protocol-core evidence should dominate future x402 / Stacks reports.',
-    noveltyAssessment: 'Medium-high: the retrieval architecture is improving, but the external evidence layer still needs expansion.',
-    nextResearchActions: [
-      'Expand the local protocol knowledge base with real docs and implementation notes.',
-      'Add Stacks docs / SIP sources as first-class retrieval targets.',
-      'Separate protocol-core findings from neighboring systems literature in the UI.'
-    ],
-    quality: {
-      evidenceCoverage: topPapers.length,
-      synthesisMode: 'fallback',
-      confidence: 'medium'
-    }
-  };
+function buildPaymentFlow() {
+  return [
+    'User submits a research question.',
+    'Manager agent retrieves papers and prepares the committee meeting.',
+    'Backend returns an x402 payment challenge for premium synthesis.',
+    'User pays in simulated Stacks-native settlement flow (USDCx / sBTC narrative).',
+    'Specialist agents and report synthesis unlock after payment verification.'
+  ];
 }
 
 async function callLLM(messages, temperature = 0.1) {
@@ -273,18 +266,10 @@ async function callLLM(messages, temperature = 0.1) {
       env: process.env,
       stdio: ['pipe', 'pipe', 'pipe']
     });
-
     let stdout = '';
     let stderr = '';
-
-    child.stdout.on('data', (chunk) => {
-      stdout += chunk.toString();
-    });
-
-    child.stderr.on('data', (chunk) => {
-      stderr += chunk.toString();
-    });
-
+    child.stdout.on('data', (chunk) => { stdout += chunk.toString(); });
+    child.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
     child.on('error', reject);
     child.on('close', (code) => {
       if (code !== 0) {
@@ -293,7 +278,6 @@ async function callLLM(messages, temperature = 0.1) {
       }
       resolve(stdout);
     });
-
     child.stdin.write(JSON.stringify({ messages, temperature }));
     child.stdin.end();
   });
@@ -304,216 +288,279 @@ async function callLLM(messages, temperature = 0.1) {
   } catch {
     throw new Error(`LLM returned non-JSON envelope: ${rawText}`);
   }
-
   if (parsed?.code !== undefined) {
-    if (parsed.code !== 0) {
-      throw new Error(parsed.message || JSON.stringify(parsed));
-    }
+    if (parsed.code !== 0) throw new Error(parsed.message || JSON.stringify(parsed));
     parsed = parsed.data || {};
   }
-
   if (parsed?.http_status || parsed?.error) {
     throw new Error(parsed.error || `HTTP ${parsed.http_status}`);
   }
-
   return parsed?.choices?.[0]?.message?.content ?? parsed?.choices?.[0]?.content ?? parsed?.choices?.[0]?.text ?? '';
 }
 
 async function callJSONAgent(role, instruction, payload, fallbackObject) {
   const systemPrompt = [
-    `You are the ${role} in an academic multi-agent research committee.`,
+    `You are the ${role} in an AI Parliament for research synthesis.`,
     'Use only the provided evidence.',
-    'Prefer protocol-core sources when present.',
-    'Be conservative, specific, and non-marketing.',
+    'Separate the research topic from the payment rail: the topic can be broad, while x402 + Stacks is the monetization and settlement layer.',
+    'Be specific, conservative, and transparent.',
     'Return strict JSON only.'
   ].join(' ');
 
-  const userPrompt = [
-    instruction,
-    `Payload: ${JSON.stringify(payload)}`
-  ].join(' ');
-
+  const userPrompt = `${instruction} Payload: ${JSON.stringify(payload)}`;
   try {
     const content = await callLLM([
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt }
-    ], 0.1);
+    ], 0.15);
     return parseJSONContent(content) || fallbackObject;
   } catch {
     return fallbackObject;
   }
 }
 
-async function runResearchCommittee(topic, papers) {
-  const evidencePack = papers.slice(0, 6).map((paper, index) => ({
-    rank: index + 1,
-    title: paper.title,
-    published: formatDate(paper.published),
-    authors: paper.authors,
-    relevanceScore: paper.relevanceScore,
-    evidenceClass: paper.evidenceClass,
-    sourceType: paper.sourceType,
-    abstract: truncate(paper.summary, 700)
-  }));
-  const evidenceStats = buildEvidenceStats(papers);
-
-  const plannerFallback = {
-    scope: `Focus on the research question: ${topic}. Prioritize protocol-core evidence on x402 payment flow design, Stacks settlement assumptions, USDCx/sBTC asset handling, and authorization after payment.`,
-    retrievalPlan: 'Prefer local protocol-core evidence first, then supporting external literature.',
-    evaluationCriteria: ['x402/payment challenge clarity', 'Stacks settlement design', 'asset and authorization flow', 'evidence-class match']
-  };
-
-  const planner = await callJSONAgent(
-    'Planner Agent',
-    'Return JSON with keys scope, retrievalPlan, evaluationCriteria (array of short strings).',
-    { topic, evidencePack, evidenceStats },
-    plannerFallback
-  );
-
-  const skepticFallback = {
-    challenge: 'Do not claim trustlessness, production readiness, or full protocol validation unless supported by protocol-core evidence.',
-    weakPoints: ['limited third-party protocol citations', 'local knowledge base entries are curated scaffolding', 'supporting literature may be adjacent rather than direct'],
-    caution: 'Keep a hard boundary between protocol-core evidence and merely supportive systems evidence.'
-  };
-
-  const skeptic = await callJSONAgent(
-    'Skeptic Agent',
-    'Return JSON with keys challenge, weakPoints (array of short strings), caution.',
-    { topic, evidencePack, planner, evidenceStats },
-    skepticFallback
-  );
-
-  const synthesisFallback = {
-    executiveSummary: `This V5 evidence pack is materially stronger for x402 and Stacks because it blends a local protocol knowledge base with external retrieval. The most credible project framing is now a machine-to-machine payment architecture in which x402 defines the payment challenge and access gate, while Stacks provides the settlement narrative and asset flow model for USDCx and sBTC-powered specialist services.`,
+function buildForecastFallback(topic, evidenceBundle) {
+  const stats = buildEvidenceStats(evidenceBundle.researchEvidence);
+  return {
+    mode: 'fallback',
+    executiveSummary: `Near-term forecasts for ${topic} suggest that AI agent economies are more likely to emerge as narrow, payment-gated specialist networks than as fully autonomous open markets. x402 and Stacks should be treated as the payment and settlement rails that monetize and unlock the workflow, not as the subject that replaces the research question itself.`,
+    researchQuestion: topic,
+    methodology: 'Mixed evidence retrieval plus deterministic AI Parliament fallback for forecast synthesis.',
     keyFindings: [
-      'x402 should be presented as the payment-challenge and entitlement boundary for agent APIs.',
-      'Stacks is the settlement-layer story that ties the payment flow to Bitcoin-adjacent infrastructure.',
-      'USDCx and sBTC represent distinct asset strategies: stable pricing versus ecosystem alignment.',
-      'The research system should visibly separate protocol-core evidence from merely supporting literature.'
+      'The most plausible 3-year path is growth in narrow specialist tool markets rather than fully autonomous general economies.',
+      'Payment infrastructure and entitlement release are likely to standardize before fully liquid agent markets appear.',
+      'x402 can serve as the paywall / entitlement boundary, while Stacks supplies a settlement narrative for premium research workflows.',
+      'Forecast confidence is limited because most retrieved evidence is architectural or conceptual rather than market-operational.'
     ],
     implications: [
-      'The demo is now stronger as a protocol memo than as a generic paper summarizer.',
-      'Future retrieval should prioritize Stacks docs, SIP materials, and implementation notes over broad academic search.',
-      'Judges should be shown evidence quality labels so they understand where claims come from.'
+      'The product should market itself as a paid AI research network, not as a solved autonomous economy.',
+      'Judge-facing demos should show both topic-specific research results and the x402 payment unlock path.',
+      'A forecasting mode is appropriate for future-oriented topics and should produce scenario-based outputs.'
     ],
-    consensus: 'The strongest supported path is an x402-gated specialist network with Stacks-native settlement semantics and explicit post-payment authorization design.',
-    noveltyAssessment: 'High: the novelty is now concentrated in protocol composition, evidence-aware research synthesis, and payment-gated multi-agent workflows.',
+    limitations: [
+      'Forecasting evidence is still sparse and partly conceptual.',
+      'Payment rail evidence is stronger than market-adoption evidence.'
+    ],
+    noveltyAssessment: 'High as a product architecture; medium as a market forecast.',
+    consensus: 'Over the next 3 years, expect AI agent economies to advance first through premium specialist workflows and payment-gated APIs.',
     nextResearchActions: [
-      'Add Stacks docs and SIP references as first-class retrievers.',
-      'Implement receipt verification against a real Stacks transaction path.',
-      'Attach each claim to protocol-core or supporting evidence in the UI.'
-    ]
-  };
-
-  const synthesizer = await callJSONAgent(
-    'Synthesis Agent',
-    'Return JSON with keys executiveSummary, keyFindings (4-7 short strings), implications (3-5 short strings), consensus, noveltyAssessment, nextResearchActions (3-5 short strings).',
-    { topic, evidencePack, planner, skeptic, evidenceStats },
-    synthesisFallback
-  );
-
-  const criticFallback = {
-    methodology: 'A staged committee process combined mixed retrieval (local x402/Stacks knowledge base plus external search), planner scoping, skeptic challenge, and synthesis over evidence-class-labeled materials.',
-    limitations: ['Local knowledge base entries are curated first-party scaffolding.', 'Direct Stacks protocol documentation is not yet a first-class retriever.', 'Real receipt verification remains simulated in the current implementation.'],
-    confidence: evidenceStats['protocol-core'] >= 3 ? 'high' : 'medium'
-  };
-
-  const critic = await callJSONAgent(
-    'Critic Agent',
-    'Return JSON with keys methodology, limitations (2-4 short strings), confidence.',
-    { topic, evidencePack, planner, skeptic, synthesizer, evidenceStats },
-    criticFallback
-  );
-
-  return {
-    mode: 'llm-committee',
-    executiveSummary: synthesizer.executiveSummary,
-    researchQuestion: topic,
-    methodology: critic.methodology,
-    keyFindings: safeArray(synthesizer.keyFindings, []),
-    implications: safeArray(synthesizer.implications, []),
-    limitations: safeArray(critic.limitations, []),
-    evidenceTable: buildDeterministicEvidenceTable(papers),
-    agentDebate: buildAgentDebate(topic, papers, planner, skeptic, synthesizer),
-    consensus: synthesizer.consensus,
-    noveltyAssessment: synthesizer.noveltyAssessment,
-    nextResearchActions: safeArray(synthesizer.nextResearchActions, []),
+      'Add timeline-based forecast sections to the UI.',
+      'Attach scenario probabilities to each future-looking claim.',
+      'Collect more empirical evidence on agent tool market adoption.'
+    ],
+    scenarios: [
+      { name: 'Base case', probability: '55%', outlook: 'Specialist paid agents grow, but broad autonomous markets remain early.', driver: 'Payment-gated APIs standardize faster than open agent coordination.' },
+      { name: 'Bull case', probability: '25%', outlook: 'Agent tool markets deepen with standardized payments and entitlement protocols.', driver: 'Rapid ecosystem adoption of x402-like pricing and interoperable capability release.' },
+      { name: 'Bear case', probability: '20%', outlook: 'Adoption stays fragmented across closed vendor ecosystems.', driver: 'Weak standards adoption and poor inter-agent trust infrastructure.' }
+    ],
+    timeline: [
+      { window: '0-12 months', expectation: 'Premium specialist workflows and paid API experiments expand.' },
+      { window: '12-24 months', expectation: 'Better standards emerge for payment-gated tools and agent identity.' },
+      { window: '24-36 months', expectation: 'Selective machine-to-machine markets appear, but not fully open autonomous economies.' }
+    ],
     quality: {
-      evidenceCoverage: evidencePack.length,
-      synthesisMode: 'multi-agent-committee',
-      confidence: critic.confidence || 'medium',
-      evidenceStats
+      evidenceCoverage: evidenceBundle.researchEvidence.length,
+      synthesisMode: 'forecast-fallback',
+      confidence: stats['supporting'] >= 3 ? 'medium' : 'low',
+      evidenceStats: stats
     }
   };
 }
 
-async function generateLLMSummary(topic, papers) {
-  if (!OPENAI_API_KEY) {
-    return buildLocalFallbackSummary(topic, papers, 'OpenAI-compatible key not configured');
-  }
+async function runAIParliament(topic, mode, evidenceBundle) {
+  const researchEvidence = evidenceBundle.researchEvidence.map((paper, index) => ({
+    rank: index + 1,
+    title: paper.title,
+    published: formatDate(paper.published),
+    authors: paper.authors,
+    sourceType: paper.sourceType,
+    evidenceClass: paper.evidenceClass,
+    abstract: truncate(paper.summary, 700)
+  }));
 
+  const paymentEvidence = evidenceBundle.paymentEvidence.map((paper, index) => ({
+    rank: index + 1,
+    title: paper.title,
+    sourceType: paper.sourceType,
+    evidenceClass: paper.evidenceClass,
+    abstract: truncate(paper.summary, 400)
+  }));
+
+  const stats = buildEvidenceStats(researchEvidence);
+
+  const chairFallback = {
+    framing: `Research the user's topic directly (${topic}) and use x402 + Stacks only as the payment and settlement rail that unlocks premium synthesis.`,
+    agenda: ['summarize retrieved papers', 'debate likely future paths', 'separate topic findings from payment rail design', 'produce an auditable conclusion']
+  };
+
+  const chair = await callJSONAgent(
+    'Chair Agent',
+    'Return JSON with keys framing and agenda (array of short strings).',
+    { topic, mode, researchEvidence, paymentEvidence, paymentRail: PAYMENT_RAIL },
+    chairFallback
+  );
+
+  const marketFallback = {
+    thesis: 'Agent economies will likely mature first as premium specialist tool networks with human-supervised orchestration.',
+    drivers: ['tool specialization', 'payment-gated access', 'agent discovery', 'infrastructure standardization'],
+    risks: ['fragmented vendor ecosystems', 'weak trust and entitlement standards', 'limited empirical adoption data']
+  };
+
+  const market = await callJSONAgent(
+    'Market Analyst Agent',
+    'Return JSON with keys thesis, drivers (3-5 short strings), risks (3-5 short strings).',
+    { topic, mode, researchEvidence },
+    marketFallback
+  );
+
+  const infraFallback = {
+    thesis: 'x402 and Stacks should be presented as the monetization and settlement rails that support premium research workflows, not as a constraint on what topics can be researched.',
+    mechanisms: ['x402 payment challenge', 'Stacks settlement narrative', 'USDCx/sBTC asset options', 'post-payment capability release']
+  };
+
+  const infra = await callJSONAgent(
+    'Infrastructure Agent',
+    'Return JSON with keys thesis and mechanisms (3-5 short strings).',
+    { topic, paymentEvidence, paymentRail: PAYMENT_RAIL },
+    infraFallback
+  );
+
+  const skepticFallback = {
+    caution: 'Do not overclaim broad autonomous economies. Evidence supports directional forecasting, not precise market inevitability.',
+    weakPoints: ['limited deployment data', 'future adoption uncertainty', 'topic evidence stronger than market proof in some areas']
+  };
+
+  const skeptic = await callJSONAgent(
+    'Skeptic Agent',
+    'Return JSON with keys caution and weakPoints (array of short strings).',
+    { topic, researchEvidence, paymentEvidence, market, infra },
+    skepticFallback
+  );
+
+  const synthesisFallback = mode === 'forecast'
+    ? buildForecastFallback(topic, evidenceBundle)
+    : {
+        mode: 'fallback',
+        executiveSummary: `The topic ${topic} can be researched independently, while x402 and Stacks remain the payment rail used to unlock premium synthesis and specialist assets.`,
+        researchQuestion: topic,
+        methodology: 'Mixed retrieval with AI Parliament synthesis.',
+        keyFindings: ['The research topic should remain primary.', 'x402 + Stacks should stay as the monetization layer.', 'Committee synthesis improves auditability.'],
+        implications: ['Separate content intelligence from payment infrastructure.'],
+        limitations: ['Limited source diversity.'],
+        noveltyAssessment: 'Medium',
+        consensus: 'Topic and payment rail should be distinct layers.',
+        nextResearchActions: ['Expand sources.'],
+        quality: { evidenceCoverage: researchEvidence.length, synthesisMode: 'fallback', confidence: 'medium', evidenceStats: stats }
+      };
+
+  const synthesizer = await callJSONAgent(
+    'Synthesizer Agent',
+    mode === 'forecast'
+      ? 'Return JSON with keys executiveSummary, keyFindings (4-6 strings), implications (3-5 strings), limitations (2-4 strings), noveltyAssessment, consensus, nextResearchActions (3-5 strings), scenarios (array of 3 objects with name, probability, outlook, driver), timeline (array of 3 objects with window and expectation).'
+      : 'Return JSON with keys executiveSummary, keyFindings (4-6 strings), implications (3-5 strings), limitations (2-4 strings), noveltyAssessment, consensus, nextResearchActions (3-5 strings).',
+    { topic, mode, chair, market, infra, skeptic, researchEvidence, paymentEvidence, stats },
+    synthesisFallback
+  );
+
+  return {
+    mode: 'llm-parliament',
+    executiveSummary: synthesizer.executiveSummary || synthesisFallback.executiveSummary,
+    researchQuestion: topic,
+    methodology: `AI Parliament workflow over retrieved research evidence plus x402/Stacks payment-rail evidence. Chair agenda: ${safeArray(chair.agenda, []).join('; ')}`,
+    keyFindings: safeArray(synthesizer.keyFindings, synthesisFallback.keyFindings || []),
+    implications: safeArray(synthesizer.implications, synthesisFallback.implications || []),
+    limitations: safeArray(synthesizer.limitations, synthesisFallback.limitations || []),
+    noveltyAssessment: synthesizer.noveltyAssessment || synthesisFallback.noveltyAssessment,
+    consensus: synthesizer.consensus || synthesisFallback.consensus,
+    nextResearchActions: safeArray(synthesizer.nextResearchActions, synthesisFallback.nextResearchActions || []),
+    scenarios: safeArray(synthesizer.scenarios, synthesisFallback.scenarios || []),
+    timeline: safeArray(synthesizer.timeline, synthesisFallback.timeline || []),
+    evidenceTable: buildEvidenceTable(evidenceBundle.researchEvidence),
+    paymentEvidenceTable: buildEvidenceTable(evidenceBundle.paymentEvidence),
+    parliament: [
+      { agent: 'Chair Agent', role: 'Debate chair', stance: chair.framing || chairFallback.framing },
+      { agent: 'Market Analyst Agent', role: 'Future market analysis', stance: market.thesis || marketFallback.thesis },
+      { agent: 'Infrastructure Agent', role: 'x402 + Stacks payment rail', stance: infra.thesis || infraFallback.thesis },
+      { agent: 'Skeptic Agent', role: 'Challenge and uncertainty control', stance: skeptic.caution || skepticFallback.caution }
+    ],
+    quality: {
+      evidenceCoverage: evidenceBundle.researchEvidence.length,
+      synthesisMode: mode === 'forecast' ? 'ai-parliament-forecast' : 'ai-parliament',
+      confidence: mode === 'forecast' ? 'medium' : 'medium-high',
+      evidenceStats: stats
+    }
+  };
+}
+
+async function generateReport(topic, mode, evidenceBundle) {
+  if (!OPENAI_API_KEY) {
+    return buildForecastFallback(topic, evidenceBundle);
+  }
   try {
-    return await runResearchCommittee(topic, papers);
+    return await runAIParliament(topic, mode, evidenceBundle);
   } catch (error) {
     return {
-      ...buildLocalFallbackSummary(topic, papers, 'LLM committee request errored'),
+      ...buildForecastFallback(topic, evidenceBundle),
       error: error.message || 'unknown llm error'
     };
   }
 }
 
-function buildResearchReport(topic, papers, llmResult, extractedAssets) {
+function buildResearchReport(topic, mode, evidenceBundle, llmResult, extractedAssets) {
   return {
-    title: `AutoScholar research dossier: ${topic}`,
-    executiveSummary: llmResult.executiveSummary || 'No summary generated.',
+    title: `AutoScholar ${mode === 'forecast' ? 'forecast dossier' : 'research dossier'}: ${topic}`,
+    researchMode: mode,
+    executiveSummary: llmResult.executiveSummary,
     researchQuestion: llmResult.researchQuestion || topic,
-    methodology: llmResult.methodology || 'Mixed retrieval, manager triage, paid specialist unlock, and committee synthesis.',
-    protocolFocus: {
-      challengeStandard: 'x402 / HTTP 402 Payment Required',
-      settlementLayer: 'Stacks',
-      settlementAssets: ['USDCx', 'sBTC'],
-      authorizationModel: 'payment-gated specialist access after verified settlement',
-      specialistPattern: 'manager + paid molbot + post-payment capability release'
-    },
+    methodology: llmResult.methodology,
     keyFindings: safeArray(llmResult.keyFindings, []),
-    evidenceTable: safeArray(llmResult.evidenceTable, []),
-    agentDebate: safeArray(llmResult.agentDebate, buildAgentDebate(topic, papers)),
-    consensus: llmResult.consensus || 'The evidence suggests a cautious synthesis rather than a single dominant conclusion.',
-    limitations: safeArray(llmResult.limitations, []),
     implications: safeArray(llmResult.implications, []),
-    noveltyAssessment: llmResult.noveltyAssessment || 'Unknown',
+    limitations: safeArray(llmResult.limitations, []),
+    noveltyAssessment: llmResult.noveltyAssessment,
+    consensus: llmResult.consensus,
     nextResearchActions: safeArray(llmResult.nextResearchActions, []),
-    quality: llmResult.quality || { evidenceCoverage: papers.length, synthesisMode: 'unknown', confidence: 'unknown' },
-    papers,
+    scenarios: safeArray(llmResult.scenarios, []),
+    timeline: safeArray(llmResult.timeline, []),
+    parliament: safeArray(llmResult.parliament, []),
+    evidenceTable: safeArray(llmResult.evidenceTable, []),
+    paymentEvidenceTable: safeArray(llmResult.paymentEvidenceTable, []),
+    quality: llmResult.quality || { evidenceCoverage: evidenceBundle.researchEvidence.length, synthesisMode: 'unknown', confidence: 'unknown' },
+    paymentRail: PAYMENT_RAIL,
+    paymentFlow: buildPaymentFlow(),
     extractedAssets,
-    citations: papers.map((paper, index) => ({
+    citations: evidenceBundle.researchEvidence.map((paper, index) => ({
       ref: `[${index + 1}]`,
       title: paper.title,
-      published: formatDate(paper.published),
       authors: paper.authors,
-      id: paper.id,
+      published: formatDate(paper.published),
       sourceType: paper.sourceType,
-      evidenceClass: paper.evidenceClass
+      evidenceClass: paper.evidenceClass,
+      id: paper.id
+    })),
+    paymentCitations: evidenceBundle.paymentEvidence.map((paper, index) => ({
+      ref: `[P${index + 1}]`,
+      title: paper.title,
+      authors: paper.authors,
+      sourceType: paper.sourceType,
+      evidenceClass: paper.evidenceClass,
+      id: paper.id
     }))
   };
 }
 
 app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, service: 'autoscholar-backend', mode: 'hybrid-demo' });
+  res.json({ ok: true, service: 'autoscholar-backend', mode: 'v6-ai-parliament' });
 });
 
 app.get('/api/config', (_req, res) => {
   res.json({
     apiBase: `http://localhost:${PORT}`,
-    frontendOrigin: FRONTEND_ORIGIN,
-    demoMode: true,
-    paymentAsset: 'USDCx',
-    paymentAmount: '0.5',
     llmConfigured: Boolean(OPENAI_API_KEY),
     model: OPENAI_MODEL,
     providerBaseUrl: OPENAI_BASE_URL,
-    paperSource: 'mixed (local x402/stacks kb + arxiv)',
-    orchestrationMode: 'manager + planner + retriever + skeptic + synthesis + critic',
+    paperSource: 'topic papers + payment rail knowledge',
+    paymentRail: PAYMENT_RAIL,
+    orchestrationMode: 'AI Parliament (chair + market analyst + infrastructure agent + skeptic)',
     requiredEnv: OPENAI_API_KEY ? [] : ['OPENAI_API_KEY']
   });
 });
@@ -524,26 +571,27 @@ app.get('/api/jobs', (_req, res) => {
 
 app.post('/api/research', async (req, res) => {
   const { topic } = req.body || {};
-
   if (!topic || typeof topic !== 'string') {
     return res.status(400).json({ error: 'topic is required' });
   }
 
   try {
-    const searchQuery = extractQuery(topic);
-    const papers = await retrieveEvidence(searchQuery, topic);
+    const researchMode = deriveResearchMode(topic);
+    const evidenceBundle = await retrieveEvidence(topic, researchMode);
     const id = makeId();
     const job = {
       id,
       topic,
-      searchQuery,
-      paperSource: 'mixed',
-      papers,
+      searchQuery: evidenceBundle.query,
+      researchMode,
+      paperSource: 'topic papers + payment rail knowledge',
+      papers: evidenceBundle.researchEvidence,
+      paymentEvidence: evidenceBundle.paymentEvidence,
       status: 'awaiting-payment',
       createdAt: new Date().toISOString(),
       orchestration: {
         manager: 'Manager Molbot',
-        specialists: ['Planner Agent', 'Retriever Agent', 'Skeptic Agent', 'Synthesis Agent', 'Critic Agent', 'Image Extractor Molbot'],
+        specialists: ['Chair Agent', 'Market Analyst Agent', 'Infrastructure Agent', 'Skeptic Agent', 'Image Extractor Molbot'],
         meetingStatus: 'scheduled'
       },
       paymentRequest: {
@@ -553,7 +601,7 @@ app.post('/api/research', async (req, res) => {
         recipient: 'STX-DEMO-RECIPIENT',
         challenge: 'HTTP 402 Payment Required',
         specialist: 'Image Extractor Molbot',
-        reason: 'Diagram extraction requires payment before access is granted.'
+        reason: 'Premium synthesis, AI Parliament debate, and extracted assets unlock after payment.'
       },
       extractedAssets: [],
       report: null
@@ -568,17 +616,15 @@ app.post('/api/research', async (req, res) => {
 
 app.post('/api/jobs/:id/pay', async (req, res) => {
   const job = jobs.get(req.params.id);
-
   if (!job) {
     return res.status(404).json({ error: 'job not found' });
   }
 
   const token = req.header('x-payment-token') || req.body?.paymentToken;
-
   if (token !== DEMO_PAYMENT_TOKEN) {
     return res.status(402).json({
       error: 'payment required',
-      message: 'Provide a valid demo payment token to unlock the specialist molbot.',
+      message: 'Provide a valid demo payment token to unlock the AI Parliament report.',
       expectedHeader: 'x-payment-token'
     });
   }
@@ -588,14 +634,14 @@ app.post('/api/jobs/:id/pay', async (req, res) => {
       {
         id: 'asset_1',
         type: 'diagram',
-        title: 'x402 challenge → Stacks settlement → capability release',
-        description: 'Simulated diagram delivered by the paid Image Extractor Molbot.'
+        title: 'AI Parliament + x402 payment unlock flow',
+        description: 'Simulated diagram showing retrieval, debate, x402 payment challenge, Stacks settlement, and premium report release.'
       },
       {
         id: 'asset_2',
         type: 'chart',
-        title: 'USDCx / sBTC payment routing for specialist agents',
-        description: 'Simulated chart showing asset-selection and settlement flow.'
+        title: 'Topic evidence versus payment-rail evidence',
+        description: 'Simulated chart showing the separation between research content and x402/Stacks payment infrastructure.'
       }
     ];
 
@@ -603,7 +649,14 @@ app.post('/api/jobs/:id/pay', async (req, res) => {
     job.orchestration.meetingStatus = 'in-progress';
     jobs.set(job.id, job);
 
-    const llmResult = await generateLLMSummary(job.topic, job.papers || []);
+    const evidenceBundle = {
+      researchEvidence: job.papers || [],
+      paymentEvidence: job.paymentEvidence || [],
+      combined: [...(job.papers || []), ...(job.paymentEvidence || [])],
+      query: job.searchQuery
+    };
+
+    const llmResult = await generateReport(job.topic, job.researchMode, evidenceBundle);
     const usedFallback = llmResult.mode === 'fallback';
 
     job.status = usedFallback ? 'completed_with_fallback' : 'completed';
@@ -623,7 +676,7 @@ app.post('/api/jobs/:id/pay', async (req, res) => {
       providerBaseUrl: OPENAI_BASE_URL,
       error: llmResult.error || null
     };
-    job.report = buildResearchReport(job.topic, job.papers || [], llmResult, extractedAssets);
+    job.report = buildResearchReport(job.topic, job.researchMode, evidenceBundle, llmResult, extractedAssets);
 
     jobs.set(job.id, job);
     return res.json(job);
@@ -637,11 +690,9 @@ app.post('/api/jobs/:id/pay', async (req, res) => {
 
 app.get('/api/jobs/:id', (req, res) => {
   const job = jobs.get(req.params.id);
-
   if (!job) {
     return res.status(404).json({ error: 'job not found' });
   }
-
   return res.json(job);
 });
 
@@ -654,7 +705,6 @@ server.on('error', (error) => {
     console.error(`Port ${PORT} is already in use. Set PORT to a free port and retry.`);
     process.exit(1);
   }
-
   console.error('Backend server failed to start:', error);
   process.exit(1);
 });
