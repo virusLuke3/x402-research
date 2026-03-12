@@ -710,7 +710,10 @@ app.get('/api/config', (_req, res) => {
     stacksIntegration: {
       network: STACKS_NETWORK,
       apiBase: STACKS_API_BASE,
-      verification: 'txid-proof-scaffold'
+      verification: 'txid-proof-scaffold',
+      recipientModel: 'platform-treasury-address',
+      payerModel: 'user-wallet-connect',
+      contractLanguage: 'Clarity'
     },
     requiredEnv: OPENAI_API_KEY ? [] : ['OPENAI_API_KEY']
   });
@@ -731,8 +734,8 @@ app.post('/api/research', async (req, res) => {
     const topicProfile = deriveTopicProfile(topic);
     const evidenceBundle = await retrieveEvidence(topic, researchMode, topicProfile);
     const id = makeId();
-    const stacksPayment = buildStacksPaymentRequest({ jobId: id, amount: '0.5', asset: 'USDCx' });
-    const x402Challenge = buildX402Challenge({ jobId: id, amount: '0.5', asset: 'USDCx', paymentRequest: stacksPayment });
+    const stacksPayment = buildStacksPaymentRequest({ jobId: id, amount: '0.5', asset: process.env.STACKS_PAYMENT_ASSET || 'STX' });
+    const x402Challenge = buildX402Challenge({ jobId: id, amount: '0.5', asset: stacksPayment.asset, paymentRequest: stacksPayment });
     const job = {
       id,
       topic,
@@ -752,9 +755,11 @@ app.post('/api/research', async (req, res) => {
       },
       paymentRequest: {
         type: 'x402',
-        asset: 'USDCx',
+        asset: stacksPayment.asset,
         amount: '0.5',
         recipient: stacksPayment.recipient,
+        payer: stacksPayment.payer,
+        assetType: stacksPayment.assetType,
         challenge: 'HTTP 402 Payment Required',
         specialist: 'Image Extractor Molbot',
         reason: 'Premium synthesis, AI Parliament debate, and extracted assets unlock after payment.',
@@ -827,11 +832,17 @@ app.post('/api/jobs/:id/pay', async (req, res) => {
       };
     } else {
       paymentReceipt = {
-        asset: 'USDCx',
-        amount: '0.5',
+        asset: job.paymentRequest.asset,
+        amount: job.paymentRequest.amount,
         txid: 'demo-stacks-txid',
+        sender: 'user-wallet-connect',
+        recipient: job.paymentRequest.recipient,
         settlement: 'mock-success',
-        mode: 'simulated-chain-payment'
+        mode: 'simulated-chain-payment',
+        chain: job.paymentRequest.stacks.network,
+        apiBase: job.paymentRequest.stacks.apiBase,
+        memo: job.paymentRequest.stacks.memo,
+        verificationTarget: job.paymentRequest.stacks.contract ? 'clarity-contract-state' : 'stacks-transfer'
       };
     }
 

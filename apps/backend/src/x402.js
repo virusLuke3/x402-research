@@ -13,8 +13,11 @@ export function buildX402Challenge({ jobId, amount, asset, paymentRequest }) {
       layer: 'Stacks',
       network: paymentRequest.network,
       recipient: paymentRequest.recipient,
+      payer: paymentRequest.payer,
+      assetType: paymentRequest.assetType,
       contract: paymentRequest.contract,
-      memo: paymentRequest.memo
+      memo: paymentRequest.memo,
+      settlementMethod: paymentRequest.settlementMethod
     },
     unlock: {
       resource: `/api/jobs/${jobId}/pay`,
@@ -31,6 +34,7 @@ export function buildX402Headers(challenge) {
     'x-payment-version': challenge.version,
     'x-payment-network': challenge.settlement.network,
     'x-payment-asset': challenge.asset,
+    'x-payment-asset-type': challenge.settlement.assetType,
     'x-payment-amount': String(challenge.amount),
     'x-payment-recipient': challenge.settlement.recipient,
     'x-payment-memo': challenge.settlement.memo,

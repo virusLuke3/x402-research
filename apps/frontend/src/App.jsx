@@ -93,12 +93,12 @@ export default function App() {
   return (
     <div className="page">
       <header className="hero">
-        <span className="badge">AutoScholar V6.1 · Topic-Agnostic Deep Research</span>
+        <span className="badge">AutoScholar V7.1 · Clarity-Oriented Stacks Payment Model</span>
         <h1>Topic-Agnostic Research Agent, x402/Stacks-Native Premium Unlock</h1>
         <p>
-          In V6, the research topic is independent from the payment rail. The system can study open questions
-          like future forecasts, while x402 + Stacks remains the infrastructure used to monetize premium synthesis,
-          debate logs, and specialist outputs.
+          In V7.1, the research topic stays arbitrary, while the payment layer is fixed to a testnet Stacks model:
+          user wallet pays the project treasury address, x402 carries the challenge, and the settlement model is
+          structured for eventual Clarity-smart-contract verification.
         </p>
       </header>
 
@@ -213,11 +213,14 @@ export default function App() {
                   <p>{job.paymentRequest.reason}</p>
                   <ul className="list compact">
                     <li>Asset: {job.paymentRequest.asset}</li>
+                    <li>Asset type: {job.paymentRequest.assetType}</li>
                     <li>Amount: {job.paymentRequest.amount}</li>
+                    <li>Payer: {job.paymentRequest.payer}</li>
                     <li>Recipient: {job.paymentRequest.recipient}</li>
                     <li>Challenge: {job.paymentRequest.challenge}</li>
                     <li>Stacks network: {job.paymentRequest.stacks?.network}</li>
                     <li>Stacks API: {job.paymentRequest.stacks?.apiBase}</li>
+                    <li>Settlement method: {job.paymentRequest.stacks?.settlementMethod}</li>
                     <li>Memo: {job.paymentRequest.stacks?.memo}</li>
                   </ul>
                   <button onClick={payAndComplete} disabled={loading}>
@@ -253,6 +256,7 @@ export default function App() {
                       <li>Stacks network: {job.report.paymentRail?.stacks?.network}</li>
                       <li>Stacks API: {job.report.paymentRail?.stacks?.apiBase}</li>
                       <li>Verification mode: {job.report.paymentRail?.stacks?.verificationMode}</li>
+                      <li>Contract language: Clarity</li>
                     </ul>
                   </SectionCard>
 
@@ -358,6 +362,10 @@ export default function App() {
                     <ul className="list compact">
                       {(job.report.paymentFlow || []).map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}
                     </ul>
+                    <p className="muted">
+                      Model: user wallet pays the platform treasury on Stacks testnet; later versions can swap the transfer path
+                      into a Clarity smart contract call without changing the research workflow.
+                    </p>
                   </SectionCard>
 
                   <SectionCard title="Extracted assets">
