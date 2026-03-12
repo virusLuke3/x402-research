@@ -8,6 +8,7 @@ import cors from 'cors';
 import { buildStacksPaymentRequest, verifyStacksPayment, STACKS_NETWORK, STACKS_API_BASE } from './stacks.js';
 import { buildX402Challenge, buildX402Headers } from './x402.js';
 import { buildClarityPaymentSpec, buildClarityVerificationPlan } from './clarity-payment.js';
+import { readContractInvoiceState } from './contract-state.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -651,7 +652,7 @@ async function generateReport(topic, researchMode, topicProfile, evidenceBundle)
   }
 }
 
-function buildResearchReport(topic, researchMode, topicProfile, evidenceBundle, llmResult, extractedAssets) {
+function buildResearchReport(topic, researchMode, topicProfile, evidenceBundle, llmResult, extractedAssets, contractState = null) {
   return {
     title: `AutoScholar ${researchMode === 'forecast' ? 'forecast dossier' : 'research dossier'}: ${topic}`,
     researchMode,
@@ -679,7 +680,8 @@ function buildResearchReport(topic, researchMode, topicProfile, evidenceBundle, 
       stateMachine: ['created', 'paid', 'consumed'],
       readOnlyFns: ['get-invoice', 'get-invoice-status', 'is-paid', 'is-consumed', 'has-replay-key'],
       publicFns: ['create-invoice', 'pay-invoice', 'consume-payment'],
-      backendVerificationModel: 'contract-state-aware'
+      backendVerificationModel: 'contract-state-aware',
+      currentState: contractState
     },
     paymentFlow: buildPaymentFlow(),
     extractedAssets,
@@ -908,6 +910,11 @@ app.post('/api/jobs/:id/pay', async (req, res) => {
     job.orchestration.meetingStatus = 'concluded';
     job.paidAt = new Date().toISOString();
     job.paymentReceipt = paymentReceipt;
+    job.contractState = await readContractInvoiceState({
+      jobId: job.id,
+      paymentRequest: job.paymentRequest,
+      paymentReceipt
+    });
     job.extractedAssets = extractedAssets;
     job.llm = {
       mode: llmResult.mode,
@@ -915,7 +922,7 @@ app.post('/api/jobs/:id/pay', async (req, res) => {
       providerBaseUrl: OPENAI_BASE_URL,
       error: llmResult.error || null
     };
-    job.report = buildResearchReport(job.topic, job.researchMode, job.topicProfile, evidenceBundle, llmResult, extractedAssets);
+    job.report = buildResearchReport(job.topic, job.researchMode, job.topicProfile, evidenceBundle, llmResult, extractedAssets, job.contractState);
 
     jobs.set(job.id, job);
     return res.json(job);

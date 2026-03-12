@@ -1,6 +1,6 @@
 [network]
-name = "testnet"
-node_rpc_address = "https://api.testnet.hiro.so"
+name = "devnet"
+node_rpc_address = "http://localhost:20443"
 deployment_fee_rate = 10
 
 [accounts.deployer]

@@ -56,21 +56,21 @@
 (define-read-only (get-invoice-status (job-id (string-ascii 64)))
   (match (map-get? invoices { job-id: job-id })
     invoice (ok (get status invoice))
-    (err err-invoice-not-found)
+    err-invoice-not-found
   )
 )
 
 (define-read-only (is-paid (job-id (string-ascii 64)))
   (match (map-get? invoices { job-id: job-id })
     invoice (ok (invoice-status-eq invoice status-paid))
-    (err err-invoice-not-found)
+    err-invoice-not-found
   )
 )
 
 (define-read-only (is-consumed (job-id (string-ascii 64)))
   (match (map-get? invoices { job-id: job-id })
     invoice (ok (invoice-status-eq invoice status-consumed))
-    (err err-invoice-not-found)
+    err-invoice-not-found
   )
 )
 
@@ -135,7 +135,7 @@
         )
         (ok true)
       )
-    (err err-invoice-not-found)
+    err-invoice-not-found
   )
 )
 
@@ -165,6 +165,6 @@
         )
         (ok true)
       )
-    (err err-invoice-not-found)
+    err-invoice-not-found
   )
 )

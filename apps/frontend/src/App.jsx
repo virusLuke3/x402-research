@@ -270,6 +270,9 @@ export default function App() {
                         <li>Read-only functions: {(job.report.paymentContract.readOnlyFns || []).join(', ')}</li>
                         <li>Public functions: {(job.report.paymentContract.publicFns || []).join(', ')}</li>
                         <li>Backend verification: {job.report.paymentContract.backendVerificationModel}</li>
+                        <li>Adapter source: {job.report.paymentContract.currentState?.source}</li>
+                        <li>Current contract invoice status: {job.report.paymentContract.currentState?.invoiceStatus}</li>
+                        <li>Next adapter action: {job.report.paymentContract.currentState?.nextAction}</li>
                       </ul>
                     </SectionCard>
                   ) : null}
