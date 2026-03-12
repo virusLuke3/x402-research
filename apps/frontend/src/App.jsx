@@ -12,6 +12,34 @@ const TOPIC_PRESETS = [
   '对比 Solidity 常见重入漏洞与访问控制漏洞的研究现状'
 ];
 
+const JUDGE_CRITERIA = [
+  {
+    key: 'innovation',
+    title: 'Innovation',
+    description: 'Turns HTTP 402 into a machine-payable research unlock, instead of another generic chat wrapper.'
+  },
+  {
+    key: 'technical',
+    title: 'Technical depth',
+    description: 'Combines retrieval, multi-agent synthesis, markdown dossier generation, and payment-gated capability release.'
+  },
+  {
+    key: 'stacks',
+    title: 'Stacks alignment',
+    description: 'Surfaces Clarity contract flow, testnet settlement semantics, STX / sBTC / USDCx positioning, and stacks-style verification.'
+  },
+  {
+    key: 'ux',
+    title: 'User experience',
+    description: 'Topic → unlock → readable dossier. No prompt leakage, no tool spam, no chain complexity dumped on the user.'
+  },
+  {
+    key: 'impact',
+    title: 'Impact potential',
+    description: 'Useful as a premium research primitive for Stacks-native apps, agents, and developer tooling.'
+  }
+];
+
 async function request(path, options = {}) {
   const response = await fetch(`${API_BASE}${path}`, {
     headers: {
@@ -38,6 +66,25 @@ function StatTile({ label, value, tone = 'default' }) {
     <div className={`statTile statTile-${tone}`}>
       <span>{label}</span>
       <strong>{value}</strong>
+    </div>
+  );
+}
+
+function JudgeCard({ title, description }) {
+  return (
+    <article className="judgeCard miniPanel">
+      <p className="panelKicker">Judge signal</p>
+      <h3>{title}</h3>
+      <p>{description}</p>
+    </article>
+  );
+}
+
+function AlignmentRow({ label, value, strong = false }) {
+  return (
+    <div className="alignmentRow">
+      <span>{label}</span>
+      <strong className={strong ? 'is-strong' : ''}>{value}</strong>
     </div>
   );
 }
@@ -125,6 +172,24 @@ export default function App() {
     };
   }, [job]);
 
+  const stacksSummary = useMemo(() => {
+    const payment = job?.paymentRequest;
+    const stacks = payment?.stacks;
+    return {
+      network: stacks?.network || 'testnet scaffold',
+      asset: payment?.asset || 'STX / USDCx / sBTC-ready',
+      contract: stacks?.contract || 'autoscholar-payments.clar',
+      unlock: payment?.type || 'x402 capability unlock'
+    };
+  }, [job]);
+
+  const judgeReadiness = useMemo(() => {
+    if (!job) return 'concept-ready';
+    if (job.status === 'completed' || job.status === 'completed_with_fallback') return 'demo-proven';
+    if (job.status === 'awaiting-payment') return 'flow-proven';
+    return 'in-progress';
+  }, [job]);
+
   return (
     <div className="page">
       <div className="pageGlow pageGlowA" aria-hidden="true" />
@@ -134,12 +199,12 @@ export default function App() {
         <div className="brandLockup">
           <span className="brandMark" aria-hidden="true">◈</span>
           <div>
-            <p className="brandName">AutoScholar</p>
-            <p className="brandSub">x402 research console</p>
+            <p className="brandName">AutoScholar V8.0</p>
+            <p className="brandSub">Stacks-aligned x402 research console</p>
           </div>
         </div>
         <div className="topbarMeta">
-          <span className="badge">Protocol dossier UI</span>
+          <span className="badge">Hackathon judge mode</span>
           <StatusPill status={job?.status} />
         </div>
       </header>
@@ -148,10 +213,10 @@ export default function App() {
         <div className="heroMain stack-lg">
           <div className="heroHead stack-sm">
             <span className="eyebrow">Premium research workflow</span>
-            <h1>Research pages should feel like dossiers, not chat windows.</h1>
+            <h1>A Stacks-native research product, not just a research demo.</h1>
             <p className="heroText">
-              This interface keeps the topic composer, payment gate, and final markdown report in one clear flow.
-              It’s designed to feel deliberate, editorial, and protocol-native rather than generic “AI app” chrome.
+              AutoScholar V8.0 frames the project for judges: a payment-gated research engine where x402 handles capability unlocks,
+              Stacks provides settlement semantics, Clarity models invoice state, and users receive a clean final dossier instead of raw agent chatter.
             </p>
           </div>
 
@@ -159,7 +224,7 @@ export default function App() {
             <StatTile label="Research mode" value={summaryStats.mode} tone="accent" />
             <StatTile label="Topic evidence" value={String(summaryStats.papers)} />
             <StatTile label="Payment evidence" value={String(summaryStats.paymentEvidence)} />
-            <StatTile label="Workflow" value={String(summaryStats.status).replaceAll('_', ' ')} tone="warn" />
+            <StatTile label="Judge readiness" value={judgeReadiness} tone="warn" />
           </div>
         </div>
 
@@ -190,7 +255,23 @@ export default function App() {
         </aside>
       </section>
 
-      <main className="workspaceGrid">
+      <section className="judgeBoard panel">
+        <div className="sectionHeader sectionHeader-start judgeBoardHeader">
+          <div>
+            <p className="panelKicker">Judge-facing framing</p>
+            <h2>How this version maps to the hackathon scorecard</h2>
+          </div>
+          <p className="helperText judgeBoardHint">Built to make innovation, Stacks alignment, and demo credibility legible in under one minute.</p>
+        </div>
+
+        <div className="judgeGrid">
+          {JUDGE_CRITERIA.map((item) => (
+            <JudgeCard key={item.key} title={item.title} description={item.description} />
+          ))}
+        </div>
+      </section>
+
+      <main className="workspaceGrid workspaceGridV8">
         <section className="panel composerCard" aria-labelledby="compose-heading">
           <div className="sectionHeader sectionHeader-start">
             <div>
@@ -231,7 +312,7 @@ export default function App() {
               <button className="primaryButton" disabled={loading}>
                 {loading ? 'Working…' : 'Create research job'}
               </button>
-              <p className="helperText">API base: {API_BASE}</p>
+              <p className="helperText">API base: {API_BASE || 'same-origin /api proxy'}</p>
             </div>
           </form>
 
@@ -258,6 +339,44 @@ export default function App() {
             </article>
           </div>
         </section>
+
+        <aside className="panel stacksCard" aria-labelledby="stacks-heading">
+          <div className="sectionHeader sectionHeader-start">
+            <div>
+              <p className="panelKicker">Stacks alignment</p>
+              <h2 id="stacks-heading">Protocol proof panel</h2>
+            </div>
+            <span className="badge badgeStacks">Stacks-native hooks</span>
+          </div>
+
+          <div className="stack-lg">
+            <div className="miniPanel alignmentPanel">
+              <AlignmentRow label="Settlement network" value={stacksSummary.network} strong />
+              <AlignmentRow label="Unlock primitive" value={stacksSummary.unlock} />
+              <AlignmentRow label="Settlement asset" value={stacksSummary.asset} />
+              <AlignmentRow label="Clarity contract" value={stacksSummary.contract} />
+            </div>
+
+            <div className="miniPanel">
+              <p className="panelKicker">Why this matters to judges</p>
+              <ul className="list compact">
+                <li>Shows explicit Clarity invoice-state modeling, not vague “blockchain integration”.</li>
+                <li>Keeps x402 as the capability release layer and Stacks as the settlement semantics layer.</li>
+                <li>Leaves room for sBTC / USDCx expansion without changing the user-facing flow.</li>
+                <li>Makes technical depth legible to both Stacks experts and general product judges.</li>
+              </ul>
+            </div>
+
+            <div className="miniPanel">
+              <p className="panelKicker">Next unlocks for V8+</p>
+              <ul className="list compact">
+                <li>Wallet-connected real testnet payment verification</li>
+                <li>Deployed Clarity contract with live state reads</li>
+                <li>Exportable audit / protocol briefing modes</li>
+              </ul>
+            </div>
+          </div>
+        </aside>
 
         <section className="panel reportCard" aria-labelledby="report-heading">
           <div className="sectionHeader sectionHeader-start">

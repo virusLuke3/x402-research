@@ -613,3 +613,111 @@ textarea:focus {
     scroll-behavior: auto !important;
   }
 }
+
+
+.judgeBoard {
+  padding: 22px;
+  margin-bottom: 18px;
+}
+
+.judgeBoardHeader {
+  margin-bottom: 16px;
+}
+
+.judgeBoardHint {
+  max-width: 34ch;
+}
+
+.judgeGrid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.judgeCard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 186px;
+}
+
+.judgeCard h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.judgeCard p:last-child {
+  color: var(--text-dim);
+  line-height: 1.7;
+}
+
+.workspaceGridV8 {
+  grid-template-columns: minmax(300px, 0.9fr) minmax(280px, 0.72fr) minmax(0, 1.18fr);
+}
+
+.stacksCard {
+  padding: 22px;
+}
+
+.badgeStacks {
+  color: #c5fff1;
+  background: rgba(87,255,226,0.08);
+  border-color: rgba(87,255,226,0.2);
+}
+
+.alignmentPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.alignmentRow {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.alignmentRow:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.alignmentRow span {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.alignmentRow strong {
+  font-size: 0.95rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.alignmentRow strong.is-strong {
+  color: #c5fff1;
+}
+
+@media (max-width: 1240px) {
+  .judgeGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .workspaceGridV8 {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .judgeBoard,
+  .stacksCard {
+    padding: 16px;
+  }
+
+  .judgeGrid {
+    grid-template-columns: 1fr;
+  }
+}
