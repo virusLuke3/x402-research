@@ -93,7 +93,7 @@ export default function App() {
   return (
     <div className="page">
       <header className="hero">
-        <span className="badge">AutoScholar V6 · AI Parliament + x402/Stacks Paywall</span>
+        <span className="badge">AutoScholar V6.1 · Topic-Agnostic Deep Research</span>
         <h1>Topic-Agnostic Research Agent, x402/Stacks-Native Premium Unlock</h1>
         <p>
           In V6, the research topic is independent from the payment rail. The system can study open questions

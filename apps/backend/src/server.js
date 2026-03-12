@@ -31,31 +31,67 @@ const PAYMENT_RAIL = {
   settlementAssets: ['USDCx', 'sBTC'],
   authorizationModel: 'payment-gated specialist access after verified settlement',
   specialistPattern: 'manager + paid molbot + post-payment capability release',
-  queryUnlock: 'Research query creation is free; report synthesis and specialist assets unlock after x402 payment.'
+  queryUnlock: 'Research query creation is free; report synthesis, debate transcripts, and specialist assets unlock after x402 payment.'
 };
 
-const FORECAST_FRAMEWORK = [
-  {
-    id: 'fw-agent-001',
-    title: 'Scenario planning for AI agent economies',
-    summary: 'Forecast agent economies through scenario planning rather than point predictions. Track infrastructure maturity, pricing standards, trust boundaries, and discoverability of paid tools.',
-    keywords: ['forecast', 'agent economies', 'scenario planning', 'tool markets'],
-    sourceType: 'local-framework',
-    category: 'forecast-framework',
-    published: '2026-03-12',
-    authors: ['AutoScholar Forecast Framework']
-  },
-  {
-    id: 'fw-agent-002',
-    title: 'Market structure signals for machine-to-machine commerce',
-    summary: 'Key variables include payment rails, identity, settlement confirmation, capability release, and cross-agent reputation. Early markets often emerge as narrow specialist networks before broad autonomous economies.',
-    keywords: ['machine-to-machine commerce', 'market structure', 'payments', 'reputation'],
-    sourceType: 'local-framework',
-    category: 'forecast-framework',
-    published: '2026-03-12',
-    authors: ['AutoScholar Forecast Framework']
-  }
-];
+const TOPIC_FRAMEWORKS = {
+  forecast: [
+    {
+      id: 'fw-forecast-001',
+      title: 'Scenario planning for frontier software ecosystems',
+      summary: 'Forecast through scenarios rather than single-point predictions. Track adoption friction, standardization pressure, monetization rails, and trust boundaries.',
+      keywords: ['forecast', 'scenario', 'future', 'adoption'],
+      sourceType: 'local-framework',
+      category: 'topic-framework',
+      published: '2026-03-12',
+      authors: ['AutoScholar Topic Framework']
+    },
+    {
+      id: 'fw-forecast-002',
+      title: 'Market structure signals for machine-to-machine commerce',
+      summary: 'Key variables include payment rails, identity, discovery, service pricing, and post-payment capability release. Early ecosystems usually emerge in narrow specialist niches before generalized open markets.',
+      keywords: ['market structure', 'agent economy', 'payments', 'tool markets'],
+      sourceType: 'local-framework',
+      category: 'topic-framework',
+      published: '2026-03-12',
+      authors: ['AutoScholar Topic Framework']
+    }
+  ],
+  solidity: [
+    {
+      id: 'fw-sol-001',
+      title: 'Solidity vulnerability taxonomy and exploit surface mapping',
+      summary: 'A topic scaffold covering reentrancy, access control failures, oracle manipulation, integer/precision pitfalls, upgradeability hazards, denial-of-service vectors, and unsafe external calls.',
+      keywords: ['solidity', 'smart contract', 'vulnerability', 'reentrancy', 'audit'],
+      sourceType: 'local-framework',
+      category: 'topic-framework',
+      published: '2026-03-12',
+      authors: ['AutoScholar Topic Framework']
+    },
+    {
+      id: 'fw-sol-002',
+      title: 'Security review patterns for Solidity systems',
+      summary: 'Security analysis should separate vulnerability class, exploit preconditions, realistic attack path, impact, mitigation pattern, and whether the issue is mostly architectural or implementation-specific.',
+      keywords: ['solidity', 'security review', 'exploit path', 'mitigation', 'audit checklist'],
+      sourceType: 'local-framework',
+      category: 'topic-framework',
+      published: '2026-03-12',
+      authors: ['AutoScholar Topic Framework']
+    }
+  ],
+  general: [
+    {
+      id: 'fw-general-001',
+      title: 'General deep research workflow scaffold',
+      summary: 'A general-purpose scaffold for literature search, relevance filtering, skeptical review, and synthesis for arbitrary research topics.',
+      keywords: ['literature review', 'research workflow', 'analysis'],
+      sourceType: 'local-framework',
+      category: 'topic-framework',
+      published: '2026-03-12',
+      authors: ['AutoScholar Topic Framework']
+    }
+  ]
+};
 
 function makeId(prefix = 'job') {
   return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
@@ -83,42 +119,102 @@ function deriveResearchMode(topic) {
   return 'analysis';
 }
 
+function deriveTopicProfile(topic) {
+  const text = String(topic || '').toLowerCase();
+  if (/(solidity|smart contract|reentrancy|erc-20|erc20|defi|evm|合约|漏洞|审计|重入)/i.test(text)) {
+    return {
+      key: 'solidity',
+      label: 'Solidity Security Research',
+      description: 'Topic-specific security research on Solidity vulnerabilities, exploit paths, and mitigations.',
+      retrieverHint: 'solidity vulnerabilities smart contract security audit exploit reentrancy access control',
+      specialistRoles: [
+        { agent: 'Chair Agent', role: 'Debate chair' },
+        { agent: 'Security Researcher Agent', role: 'Vulnerability taxonomy and evidence review' },
+        { agent: 'Exploit Analyst Agent', role: 'Attack path and exploit realism analysis' },
+        { agent: 'Audit Skeptic Agent', role: 'Challenge weak or overclaimed security conclusions' }
+      ]
+    };
+  }
+
+  if (deriveResearchMode(topic) === 'forecast') {
+    return {
+      key: 'forecast',
+      label: 'Forecast Research',
+      description: 'Future-oriented research with scenario analysis and timeline synthesis.',
+      retrieverHint: 'future outlook trend scenario market evolution adoption',
+      specialistRoles: [
+        { agent: 'Chair Agent', role: 'Debate chair' },
+        { agent: 'Market Analyst Agent', role: 'Future market analysis' },
+        { agent: 'Infrastructure Agent', role: 'Infrastructure and monetization rail analysis' },
+        { agent: 'Skeptic Agent', role: 'Challenge and uncertainty control' }
+      ]
+    };
+  }
+
+  return {
+    key: 'general',
+    label: 'General Deep Research',
+    description: 'Topic-agnostic literature synthesis with skeptical review.',
+    retrieverHint: 'research papers literature analysis',
+    specialistRoles: [
+      { agent: 'Chair Agent', role: 'Debate chair' },
+      { agent: 'Research Analyst Agent', role: 'Topic evidence synthesis' },
+      { agent: 'Method Skeptic Agent', role: 'Challenge weak methods and overclaims' },
+      { agent: 'Synthesis Agent', role: 'Final report integration' }
+    ]
+  };
+}
+
 function cleanTopicForSearch(topic) {
   return String(topic || '')
     .replace(/predict the future of/gi, 'future outlook for')
     .replace(/over the next \d+ years?/gi, 'near term outlook')
-    .replace(/how protocols like x402 and stacks could shape/gi, 'payment infrastructure and machine-to-machine commerce')
+    .replace(/研究关于/gi, '')
+    .replace(/我想研究/gi, '')
     .replace(/research-grade|technical|report|analysis/gi, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
 
-function extractQuery(topic, mode) {
+function extractQuery(topic, researchMode, topicProfile) {
   const cleaned = cleanTopicForSearch(topic);
-  if (mode === 'forecast') {
-    return cleaned || 'AI agent economies payment infrastructure autonomous tool markets';
+  if (topicProfile.key === 'solidity') {
+    return cleaned || topicProfile.retrieverHint;
   }
-  return cleaned || 'agent systems';
+  if (researchMode === 'forecast') {
+    return cleaned || topicProfile.retrieverHint;
+  }
+  return cleaned || topicProfile.retrieverHint;
 }
 
 function scoreEvidence(topic, item, index) {
-  const topicTerms = String(topic || '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  const topicTerms = String(topic || '').toLowerCase().split(/[^a-z0-9\u4e00-\u9fff]+/).filter(Boolean);
   const haystack = `${item.title} ${item.summary} ${(item.keywords || []).join(' ')}`.toLowerCase();
   const termHits = topicTerms.filter((term) => haystack.includes(term)).length;
   const recencyBoost = item.published?.startsWith('2025') || item.published?.startsWith('2026') ? 2 : 0;
-  const categoryBoost = item.category === 'protocol-core' ? 3 : item.category === 'forecast-framework' ? 2 : 0;
+  const categoryBoost = item.category === 'protocol-core' ? 3 : item.category === 'topic-framework' ? 2 : 0;
   return termHits + recencyBoost + categoryBoost + Math.max(0, 5 - index);
 }
 
-function classifyEvidence(topic, item) {
+function classifyEvidence(topicProfile, item) {
   const haystack = `${item.title} ${item.summary} ${(item.keywords || []).join(' ')}`.toLowerCase();
-  if (item.category === 'protocol-core') return 'protocol-core';
-  if (item.category === 'forecast-framework') return 'forecast-framework';
-  if (/agent|market|payment|commerce|forecast|future|tool/i.test(haystack)) return 'supporting';
+  if (item.category === 'protocol-core') return 'payment-rail';
+  if (item.category === 'topic-framework') return 'topic-framework';
+  if (topicProfile.key === 'solidity' && /solidity|contract|reentrancy|audit|exploit|evm|defi/.test(haystack)) return 'topic-core';
+  if (topicProfile.key === 'forecast' && /forecast|future|market|trend|agent|commerce|payment/.test(haystack)) return 'topic-core';
+  if (/agent|market|security|contract|payment|future|analysis|review/.test(haystack)) return 'supporting';
   return 'off-topic';
 }
 
-function buildPaymentRailEvidence(topic) {
+function buildTopicFrameworkEvidence(topic, topicProfile) {
+  return (TOPIC_FRAMEWORKS[topicProfile.key] || TOPIC_FRAMEWORKS.general).map((entry, index) => ({
+    ...entry,
+    relevanceScore: scoreEvidence(topic, entry, index),
+    evidenceClass: classifyEvidence(topicProfile, entry)
+  }));
+}
+
+function buildPaymentRailEvidence(topic, topicProfile) {
   return (paymentKnowledgeBase.entries || []).map((entry, index) => ({
     id: entry.id,
     title: entry.title,
@@ -129,22 +225,14 @@ function buildPaymentRailEvidence(topic) {
     sourceType: entry.sourceType || 'local-kb',
     category: entry.category || 'protocol-core',
     relevanceScore: scoreEvidence(topic, entry, index),
-    evidenceClass: classifyEvidence(topic, entry)
+    evidenceClass: classifyEvidence(topicProfile, { ...entry, category: entry.category || 'protocol-core' })
   }));
 }
 
-function buildForecastFrameworkEvidence(topic) {
-  return FORECAST_FRAMEWORK.map((entry, index) => ({
-    ...entry,
-    relevanceScore: scoreEvidence(topic, entry, index),
-    evidenceClass: classifyEvidence(topic, entry)
-  }));
-}
-
-async function fetchArxivPapers(query, topic) {
+async function fetchArxivPapers(query, topic, topicProfile) {
   const url = `https://export.arxiv.org/api/query?search_query=all:${encodeURIComponent(query)}&start=0&max_results=8&sortBy=relevance&sortOrder=descending`;
   const response = await fetch(url, {
-    headers: { 'User-Agent': 'AutoScholar/0.6 (hackathon research demo)' }
+    headers: { 'User-Agent': 'AutoScholar/0.6.1 (hackathon research demo)' }
   });
 
   if (!response.ok) {
@@ -173,24 +261,24 @@ async function fetchArxivPapers(query, topic) {
     return {
       ...paper,
       relevanceScore: scoreEvidence(topic, paper, index),
-      evidenceClass: classifyEvidence(topic, paper)
+      evidenceClass: classifyEvidence(topicProfile, paper)
     };
   }).filter((paper) => paper.title);
 }
 
-async function retrieveEvidence(topic, mode) {
-  const query = extractQuery(topic, mode);
+async function retrieveEvidence(topic, researchMode, topicProfile) {
+  const query = extractQuery(topic, researchMode, topicProfile);
   let external = [];
   try {
-    external = await fetchArxivPapers(query, topic);
+    external = await fetchArxivPapers(query, topic, topicProfile);
   } catch {
     external = [];
   }
 
-  const forecastFramework = mode === 'forecast' ? buildForecastFrameworkEvidence(topic) : [];
-  const paymentRail = buildPaymentRailEvidence(topic);
+  const topicFramework = buildTopicFrameworkEvidence(topic, topicProfile);
+  const paymentRail = buildPaymentRailEvidence(topic, topicProfile);
 
-  const researchEvidence = [...external, ...forecastFramework]
+  const topicEvidence = [...external, ...topicFramework]
     .sort((a, b) => b.relevanceScore - a.relevanceScore)
     .slice(0, 6);
 
@@ -198,14 +286,14 @@ async function retrieveEvidence(topic, mode) {
     .sort((a, b) => b.relevanceScore - a.relevanceScore)
     .slice(0, 3);
 
-  const combined = [...researchEvidence, ...paymentEvidence];
+  const combined = [...topicEvidence, ...paymentEvidence];
   if (combined.length === 0) {
     throw new Error('no evidence retrieved');
   }
 
   return {
     query,
-    researchEvidence,
+    topicEvidence,
     paymentEvidence,
     combined
   };
@@ -231,7 +319,7 @@ function safeArray(value, fallback = []) {
 }
 
 function buildEvidenceStats(items) {
-  const stats = { 'protocol-core': 0, 'forecast-framework': 0, supporting: 0, 'off-topic': 0 };
+  const stats = { 'topic-core': 0, 'topic-framework': 0, supporting: 0, 'payment-rail': 0, 'off-topic': 0 };
   for (const item of items) {
     const key = item.evidenceClass || 'off-topic';
     stats[key] = (stats[key] || 0) + 1;
@@ -252,11 +340,11 @@ function buildEvidenceTable(items) {
 
 function buildPaymentFlow() {
   return [
-    'User submits a research question.',
-    'Manager agent retrieves papers and prepares the committee meeting.',
+    'User submits an arbitrary research question.',
+    'Manager agent retrieves topic evidence and prepares the committee meeting.',
     'Backend returns an x402 payment challenge for premium synthesis.',
     'User pays in simulated Stacks-native settlement flow (USDCx / sBTC narrative).',
-    'Specialist agents and report synthesis unlock after payment verification.'
+    'Specialist agents, debate transcript, and premium report unlock after payment verification.'
   ];
 }
 
@@ -298,12 +386,12 @@ async function callLLM(messages, temperature = 0.1) {
   return parsed?.choices?.[0]?.message?.content ?? parsed?.choices?.[0]?.content ?? parsed?.choices?.[0]?.text ?? '';
 }
 
-async function callJSONAgent(role, instruction, payload, fallbackObject) {
+async function callJSONAgent(agent, role, instruction, payload, fallbackObject) {
   const systemPrompt = [
-    `You are the ${role} in an AI Parliament for research synthesis.`,
+    `You are ${agent}, serving as ${role} in an AI Parliament for deep research.`,
     'Use only the provided evidence.',
-    'Separate the research topic from the payment rail: the topic can be broad, while x402 + Stacks is the monetization and settlement layer.',
-    'Be specific, conservative, and transparent.',
+    'Treat the research topic and the x402/Stacks payment rail as separate layers.',
+    'Be specific, skeptical, and concise.',
     'Return strict JSON only.'
   ].join(' ');
 
@@ -319,56 +407,110 @@ async function callJSONAgent(role, instruction, payload, fallbackObject) {
   }
 }
 
-function buildForecastFallback(topic, evidenceBundle) {
-  const stats = buildEvidenceStats(evidenceBundle.researchEvidence);
+function buildFallbackReport(topic, researchMode, topicProfile, evidenceBundle) {
+  const stats = buildEvidenceStats(evidenceBundle.topicEvidence);
+
+  if (topicProfile.key === 'solidity') {
+    return {
+      mode: 'fallback',
+      executiveSummary: `Current evidence suggests Solidity security research should be organized around vulnerability classes, exploit preconditions, and mitigation patterns. The system can research Solidity vulnerabilities directly, while x402 + Stacks remains only the premium payment rail used to unlock the report.`,
+      researchQuestion: topic,
+      methodology: 'Topic-specific mixed retrieval plus deterministic security synthesis fallback.',
+      keyFindings: [
+        'Solidity vulnerability analysis is best structured as taxonomy + exploit path + mitigation.',
+        'Reentrancy, access control, unsafe external calls, price/oracle assumptions, and upgradeability risks are recurrent security themes.',
+        'Audit conclusions should distinguish architectural weaknesses from implementation bugs.',
+        'x402 + Stacks belongs to the monetization layer, not the Solidity topic itself.'
+      ],
+      implications: [
+        'The product can sell premium security research workflows without forcing the topic to be about the payment rail.',
+        'Topic-specific agents improve the credibility of the summary.'
+      ],
+      limitations: [
+        'Some evidence may still be generic smart contract security literature rather than Solidity-only.'
+      ],
+      noveltyAssessment: 'High as a product architecture; medium as a domain-specific review until more sources are added.',
+      consensus: 'A topic-agnostic research agent should use domain-specific panels and keep x402 + Stacks as infrastructure.',
+      nextResearchActions: [
+        'Add explicit exploit-case retrievers for Solidity incident reports.',
+        'Bind each vulnerability claim to evidence rows in the UI.',
+        'Add an audit checklist export mode.'
+      ],
+      domainSections: {
+        vulnerabilityTaxonomy: ['reentrancy', 'access control', 'oracle manipulation', 'upgradeability hazards', 'unsafe external calls'],
+        mitigationPatterns: ['checks-effects-interactions', 'role separation', 'circuit breakers', 'invariant testing', 'upgrade review discipline']
+      },
+      quality: {
+        evidenceCoverage: evidenceBundle.topicEvidence.length,
+        synthesisMode: 'topic-fallback',
+        confidence: stats['topic-core'] + stats['topic-framework'] >= 2 ? 'medium' : 'low',
+        evidenceStats: stats
+      }
+    };
+  }
+
+  if (researchMode === 'forecast') {
+    return {
+      mode: 'fallback',
+      executiveSummary: `Near-term forecasts for ${topic} suggest early growth in narrow specialist networks before broad autonomous markets emerge. x402 + Stacks should be treated as monetization and settlement rails for premium workflows, not as a replacement for the research topic.`,
+      researchQuestion: topic,
+      methodology: 'Mixed retrieval plus deterministic scenario synthesis fallback.',
+      keyFindings: [
+        'Specialist agent markets are likelier than fully open autonomous economies in the near term.',
+        'Payment and entitlement standards may mature before rich inter-agent markets do.',
+        'Forecasting should use scenarios rather than point predictions.',
+        'x402 + Stacks belongs to the unlock layer, not the topic layer.'
+      ],
+      implications: ['The project should present itself as a premium research network with scenario analysis.'],
+      limitations: ['Forecast evidence remains partially conceptual and not fully operational.'],
+      noveltyAssessment: 'High as a product design; medium as a forecast certainty level.',
+      consensus: 'Future-looking topics need scenario-based AI Parliament output, with payment rails treated separately.',
+      nextResearchActions: ['Add topic-specific forecast retrievers.', 'Attach probabilities to future claims.'],
+      scenarios: [
+        { name: 'Base case', probability: '55%', outlook: 'Specialist paid agent workflows expand faster than open autonomous economies.', driver: 'Practical workflow monetization beats open-market coordination.' },
+        { name: 'Bull case', probability: '25%', outlook: 'Standardized agent payments and discoverability accelerate ecosystem growth.', driver: 'Standards adoption and interoperable tooling improve quickly.' },
+        { name: 'Bear case', probability: '20%', outlook: 'Fragmented closed ecosystems limit cross-agent commerce.', driver: 'Weak standards and trust infrastructure.' }
+      ],
+      timeline: [
+        { window: '0-12 months', expectation: 'Paid agent workflows and premium tool APIs expand.' },
+        { window: '12-24 months', expectation: 'Better standards emerge for pricing, identity, and access unlocks.' },
+        { window: '24-36 months', expectation: 'Selective machine-to-machine commerce becomes viable in constrained niches.' }
+      ],
+      quality: {
+        evidenceCoverage: evidenceBundle.topicEvidence.length,
+        synthesisMode: 'forecast-fallback',
+        confidence: stats['topic-core'] + stats['topic-framework'] >= 2 ? 'medium' : 'low',
+        evidenceStats: stats
+      }
+    };
+  }
+
   return {
     mode: 'fallback',
-    executiveSummary: `Near-term forecasts for ${topic} suggest that AI agent economies are more likely to emerge as narrow, payment-gated specialist networks than as fully autonomous open markets. x402 and Stacks should be treated as the payment and settlement rails that monetize and unlock the workflow, not as the subject that replaces the research question itself.`,
+    executiveSummary: `The system can research the topic “${topic}” directly, while x402 + Stacks remains the premium payment rail that unlocks synthesis and specialist assets.`,
     researchQuestion: topic,
-    methodology: 'Mixed evidence retrieval plus deterministic AI Parliament fallback for forecast synthesis.',
+    methodology: 'Mixed retrieval plus deterministic topic-agnostic synthesis fallback.',
     keyFindings: [
-      'The most plausible 3-year path is growth in narrow specialist tool markets rather than fully autonomous general economies.',
-      'Payment infrastructure and entitlement release are likely to standardize before fully liquid agent markets appear.',
-      'x402 can serve as the paywall / entitlement boundary, while Stacks supplies a settlement narrative for premium research workflows.',
-      'Forecast confidence is limited because most retrieved evidence is architectural or conceptual rather than market-operational.'
+      'The research topic should remain primary.',
+      'The payment rail should remain infrastructure, not subject matter.',
+      'Topic-specific agent panels improve auditability and relevance.'
     ],
-    implications: [
-      'The product should market itself as a paid AI research network, not as a solved autonomous economy.',
-      'Judge-facing demos should show both topic-specific research results and the x402 payment unlock path.',
-      'A forecasting mode is appropriate for future-oriented topics and should produce scenario-based outputs.'
-    ],
-    limitations: [
-      'Forecasting evidence is still sparse and partly conceptual.',
-      'Payment rail evidence is stronger than market-adoption evidence.'
-    ],
-    noveltyAssessment: 'High as a product architecture; medium as a market forecast.',
-    consensus: 'Over the next 3 years, expect AI agent economies to advance first through premium specialist workflows and payment-gated APIs.',
-    nextResearchActions: [
-      'Add timeline-based forecast sections to the UI.',
-      'Attach scenario probabilities to each future-looking claim.',
-      'Collect more empirical evidence on agent tool market adoption.'
-    ],
-    scenarios: [
-      { name: 'Base case', probability: '55%', outlook: 'Specialist paid agents grow, but broad autonomous markets remain early.', driver: 'Payment-gated APIs standardize faster than open agent coordination.' },
-      { name: 'Bull case', probability: '25%', outlook: 'Agent tool markets deepen with standardized payments and entitlement protocols.', driver: 'Rapid ecosystem adoption of x402-like pricing and interoperable capability release.' },
-      { name: 'Bear case', probability: '20%', outlook: 'Adoption stays fragmented across closed vendor ecosystems.', driver: 'Weak standards adoption and poor inter-agent trust infrastructure.' }
-    ],
-    timeline: [
-      { window: '0-12 months', expectation: 'Premium specialist workflows and paid API experiments expand.' },
-      { window: '12-24 months', expectation: 'Better standards emerge for payment-gated tools and agent identity.' },
-      { window: '24-36 months', expectation: 'Selective machine-to-machine markets appear, but not fully open autonomous economies.' }
-    ],
+    implications: ['A deep research product can support arbitrary topics while monetizing premium outputs through x402 + Stacks.'],
+    limitations: ['Topic-specific source coverage still needs to grow.'],
+    noveltyAssessment: 'High as a product architecture.',
+    consensus: 'Topic and payment rail should stay decoupled.',
+    nextResearchActions: ['Expand domain profiles and retrievers.'],
     quality: {
-      evidenceCoverage: evidenceBundle.researchEvidence.length,
-      synthesisMode: 'forecast-fallback',
-      confidence: stats['supporting'] >= 3 ? 'medium' : 'low',
+      evidenceCoverage: evidenceBundle.topicEvidence.length,
+      synthesisMode: 'general-fallback',
+      confidence: stats['topic-core'] + stats['topic-framework'] >= 2 ? 'medium' : 'low',
       evidenceStats: stats
     }
   };
 }
 
-async function runAIParliament(topic, mode, evidenceBundle) {
-  const researchEvidence = evidenceBundle.researchEvidence.map((paper, index) => ({
+async function runAIParliament(topic, researchMode, topicProfile, evidenceBundle) {
+  const topicEvidence = evidenceBundle.topicEvidence.map((paper, index) => ({
     rank: index + 1,
     title: paper.title,
     published: formatDate(paper.published),
@@ -377,7 +519,6 @@ async function runAIParliament(topic, mode, evidenceBundle) {
     evidenceClass: paper.evidenceClass,
     abstract: truncate(paper.summary, 700)
   }));
-
   const paymentEvidence = evidenceBundle.paymentEvidence.map((paper, index) => ({
     rank: index + 1,
     title: paper.title,
@@ -385,131 +526,117 @@ async function runAIParliament(topic, mode, evidenceBundle) {
     evidenceClass: paper.evidenceClass,
     abstract: truncate(paper.summary, 400)
   }));
-
-  const stats = buildEvidenceStats(researchEvidence);
-
-  const chairFallback = {
-    framing: `Research the user's topic directly (${topic}) and use x402 + Stacks only as the payment and settlement rail that unlocks premium synthesis.`,
-    agenda: ['summarize retrieved papers', 'debate likely future paths', 'separate topic findings from payment rail design', 'produce an auditable conclusion']
-  };
+  const stats = buildEvidenceStats(topicEvidence);
+  const fallback = buildFallbackReport(topic, researchMode, topicProfile, evidenceBundle);
 
   const chair = await callJSONAgent(
-    'Chair Agent',
+    topicProfile.specialistRoles[0].agent,
+    topicProfile.specialistRoles[0].role,
     'Return JSON with keys framing and agenda (array of short strings).',
-    { topic, mode, researchEvidence, paymentEvidence, paymentRail: PAYMENT_RAIL },
-    chairFallback
+    { topic, researchMode, topicProfile, topicEvidence, paymentEvidence, paymentRail: PAYMENT_RAIL },
+    {
+      framing: `Research the user topic directly (${topic}) and treat x402 + Stacks only as the premium payment and settlement rail.`,
+      agenda: ['retrieve evidence', 'debate topic findings', 'separate content from payment rail', 'produce auditable conclusions']
+    }
   );
 
-  const marketFallback = {
-    thesis: 'Agent economies will likely mature first as premium specialist tool networks with human-supervised orchestration.',
-    drivers: ['tool specialization', 'payment-gated access', 'agent discovery', 'infrastructure standardization'],
-    risks: ['fragmented vendor ecosystems', 'weak trust and entitlement standards', 'limited empirical adoption data']
-  };
-
-  const market = await callJSONAgent(
-    'Market Analyst Agent',
-    'Return JSON with keys thesis, drivers (3-5 short strings), risks (3-5 short strings).',
-    { topic, mode, researchEvidence },
-    marketFallback
+  const memberOne = await callJSONAgent(
+    topicProfile.specialistRoles[1].agent,
+    topicProfile.specialistRoles[1].role,
+    'Return JSON with keys thesis, keyPoints (3-5 short strings), and caveats (2-4 short strings).',
+    { topic, researchMode, topicProfile, topicEvidence },
+    {
+      thesis: fallback.executiveSummary,
+      keyPoints: fallback.keyFindings,
+      caveats: fallback.limitations
+    }
   );
 
-  const infraFallback = {
-    thesis: 'x402 and Stacks should be presented as the monetization and settlement rails that support premium research workflows, not as a constraint on what topics can be researched.',
-    mechanisms: ['x402 payment challenge', 'Stacks settlement narrative', 'USDCx/sBTC asset options', 'post-payment capability release']
-  };
-
-  const infra = await callJSONAgent(
-    'Infrastructure Agent',
-    'Return JSON with keys thesis and mechanisms (3-5 short strings).',
-    { topic, paymentEvidence, paymentRail: PAYMENT_RAIL },
-    infraFallback
+  const memberTwo = await callJSONAgent(
+    topicProfile.specialistRoles[2].agent,
+    topicProfile.specialistRoles[2].role,
+    'Return JSON with keys thesis, keyPoints (3-5 short strings), and caveats (2-4 short strings).',
+    { topic, researchMode, topicProfile, topicEvidence, paymentEvidence, paymentRail: PAYMENT_RAIL },
+    {
+      thesis: `x402 + Stacks should stay in the infrastructure layer while the topic-specific analysis remains primary.`,
+      keyPoints: ['Keep the payment rail separate from the research subject.', 'Use payment unlock to monetize premium analysis.'],
+      caveats: ['Infrastructure evidence does not replace topic evidence.']
+    }
   );
-
-  const skepticFallback = {
-    caution: 'Do not overclaim broad autonomous economies. Evidence supports directional forecasting, not precise market inevitability.',
-    weakPoints: ['limited deployment data', 'future adoption uncertainty', 'topic evidence stronger than market proof in some areas']
-  };
 
   const skeptic = await callJSONAgent(
-    'Skeptic Agent',
+    topicProfile.specialistRoles[3].agent,
+    topicProfile.specialistRoles[3].role,
     'Return JSON with keys caution and weakPoints (array of short strings).',
-    { topic, researchEvidence, paymentEvidence, market, infra },
-    skepticFallback
+    { topic, researchMode, topicProfile, topicEvidence, memberOne, memberTwo },
+    {
+      caution: 'Do not overclaim. Keep topic evidence distinct from payment-rail evidence.',
+      weakPoints: fallback.limitations
+    }
   );
 
-  const synthesisFallback = mode === 'forecast'
-    ? buildForecastFallback(topic, evidenceBundle)
-    : {
-        mode: 'fallback',
-        executiveSummary: `The topic ${topic} can be researched independently, while x402 and Stacks remain the payment rail used to unlock premium synthesis and specialist assets.`,
-        researchQuestion: topic,
-        methodology: 'Mixed retrieval with AI Parliament synthesis.',
-        keyFindings: ['The research topic should remain primary.', 'x402 + Stacks should stay as the monetization layer.', 'Committee synthesis improves auditability.'],
-        implications: ['Separate content intelligence from payment infrastructure.'],
-        limitations: ['Limited source diversity.'],
-        noveltyAssessment: 'Medium',
-        consensus: 'Topic and payment rail should be distinct layers.',
-        nextResearchActions: ['Expand sources.'],
-        quality: { evidenceCoverage: researchEvidence.length, synthesisMode: 'fallback', confidence: 'medium', evidenceStats: stats }
-      };
+  const synthesizerInstruction = researchMode === 'forecast'
+    ? 'Return JSON with keys executiveSummary, keyFindings (4-6 strings), implications (3-5 strings), limitations (2-4 strings), noveltyAssessment, consensus, nextResearchActions (3-5 strings), scenarios (array of 3 objects with name, probability, outlook, driver), timeline (array of 3 objects with window and expectation).'
+    : topicProfile.key === 'solidity'
+      ? 'Return JSON with keys executiveSummary, keyFindings (4-6 strings), implications (3-5 strings), limitations (2-4 strings), noveltyAssessment, consensus, nextResearchActions (3-5 strings), domainSections (object with vulnerabilityTaxonomy array and mitigationPatterns array).'
+      : 'Return JSON with keys executiveSummary, keyFindings (4-6 strings), implications (3-5 strings), limitations (2-4 strings), noveltyAssessment, consensus, nextResearchActions (3-5 strings).';
 
   const synthesizer = await callJSONAgent(
     'Synthesizer Agent',
-    mode === 'forecast'
-      ? 'Return JSON with keys executiveSummary, keyFindings (4-6 strings), implications (3-5 strings), limitations (2-4 strings), noveltyAssessment, consensus, nextResearchActions (3-5 strings), scenarios (array of 3 objects with name, probability, outlook, driver), timeline (array of 3 objects with window and expectation).'
-      : 'Return JSON with keys executiveSummary, keyFindings (4-6 strings), implications (3-5 strings), limitations (2-4 strings), noveltyAssessment, consensus, nextResearchActions (3-5 strings).',
-    { topic, mode, chair, market, infra, skeptic, researchEvidence, paymentEvidence, stats },
-    synthesisFallback
+    'Final report integration',
+    synthesizerInstruction,
+    { topic, researchMode, topicProfile, chair, memberOne, memberTwo, skeptic, topicEvidence, paymentEvidence, stats, paymentRail: PAYMENT_RAIL },
+    fallback
   );
 
   return {
     mode: 'llm-parliament',
-    executiveSummary: synthesizer.executiveSummary || synthesisFallback.executiveSummary,
+    executiveSummary: synthesizer.executiveSummary || fallback.executiveSummary,
     researchQuestion: topic,
-    methodology: `AI Parliament workflow over retrieved research evidence plus x402/Stacks payment-rail evidence. Chair agenda: ${safeArray(chair.agenda, []).join('; ')}`,
-    keyFindings: safeArray(synthesizer.keyFindings, synthesisFallback.keyFindings || []),
-    implications: safeArray(synthesizer.implications, synthesisFallback.implications || []),
-    limitations: safeArray(synthesizer.limitations, synthesisFallback.limitations || []),
-    noveltyAssessment: synthesizer.noveltyAssessment || synthesisFallback.noveltyAssessment,
-    consensus: synthesizer.consensus || synthesisFallback.consensus,
-    nextResearchActions: safeArray(synthesizer.nextResearchActions, synthesisFallback.nextResearchActions || []),
-    scenarios: safeArray(synthesizer.scenarios, synthesisFallback.scenarios || []),
-    timeline: safeArray(synthesizer.timeline, synthesisFallback.timeline || []),
-    evidenceTable: buildEvidenceTable(evidenceBundle.researchEvidence),
-    paymentEvidenceTable: buildEvidenceTable(evidenceBundle.paymentEvidence),
+    methodology: `AI Parliament workflow over topic evidence plus a separate x402/Stacks payment-rail evidence layer. Chair agenda: ${safeArray(chair.agenda, []).join('; ')}`,
+    keyFindings: safeArray(synthesizer.keyFindings, fallback.keyFindings || []),
+    implications: safeArray(synthesizer.implications, fallback.implications || []),
+    limitations: safeArray(synthesizer.limitations, fallback.limitations || []),
+    noveltyAssessment: synthesizer.noveltyAssessment || fallback.noveltyAssessment,
+    consensus: synthesizer.consensus || fallback.consensus,
+    nextResearchActions: safeArray(synthesizer.nextResearchActions, fallback.nextResearchActions || []),
+    scenarios: safeArray(synthesizer.scenarios, fallback.scenarios || []),
+    timeline: safeArray(synthesizer.timeline, fallback.timeline || []),
+    domainSections: synthesizer.domainSections || fallback.domainSections || null,
     parliament: [
-      { agent: 'Chair Agent', role: 'Debate chair', stance: chair.framing || chairFallback.framing },
-      { agent: 'Market Analyst Agent', role: 'Future market analysis', stance: market.thesis || marketFallback.thesis },
-      { agent: 'Infrastructure Agent', role: 'x402 + Stacks payment rail', stance: infra.thesis || infraFallback.thesis },
-      { agent: 'Skeptic Agent', role: 'Challenge and uncertainty control', stance: skeptic.caution || skepticFallback.caution }
+      { agent: topicProfile.specialistRoles[0].agent, role: topicProfile.specialistRoles[0].role, stance: chair.framing || 'No framing produced.' },
+      { agent: topicProfile.specialistRoles[1].agent, role: topicProfile.specialistRoles[1].role, stance: memberOne.thesis || 'No thesis produced.' },
+      { agent: topicProfile.specialistRoles[2].agent, role: topicProfile.specialistRoles[2].role, stance: memberTwo.thesis || 'No thesis produced.' },
+      { agent: topicProfile.specialistRoles[3].agent, role: topicProfile.specialistRoles[3].role, stance: skeptic.caution || 'No caution produced.' }
     ],
     quality: {
-      evidenceCoverage: evidenceBundle.researchEvidence.length,
-      synthesisMode: mode === 'forecast' ? 'ai-parliament-forecast' : 'ai-parliament',
-      confidence: mode === 'forecast' ? 'medium' : 'medium-high',
+      evidenceCoverage: evidenceBundle.topicEvidence.length,
+      synthesisMode: researchMode === 'forecast' ? 'ai-parliament-forecast' : topicProfile.key === 'solidity' ? 'ai-parliament-security' : 'ai-parliament-general',
+      confidence: stats['topic-core'] + stats['topic-framework'] >= 2 ? 'medium-high' : 'medium',
       evidenceStats: stats
     }
   };
 }
 
-async function generateReport(topic, mode, evidenceBundle) {
+async function generateReport(topic, researchMode, topicProfile, evidenceBundle) {
   if (!OPENAI_API_KEY) {
-    return buildForecastFallback(topic, evidenceBundle);
+    return buildFallbackReport(topic, researchMode, topicProfile, evidenceBundle);
   }
   try {
-    return await runAIParliament(topic, mode, evidenceBundle);
+    return await runAIParliament(topic, researchMode, topicProfile, evidenceBundle);
   } catch (error) {
     return {
-      ...buildForecastFallback(topic, evidenceBundle),
+      ...buildFallbackReport(topic, researchMode, topicProfile, evidenceBundle),
       error: error.message || 'unknown llm error'
     };
   }
 }
 
-function buildResearchReport(topic, mode, evidenceBundle, llmResult, extractedAssets) {
+function buildResearchReport(topic, researchMode, topicProfile, evidenceBundle, llmResult, extractedAssets) {
   return {
-    title: `AutoScholar ${mode === 'forecast' ? 'forecast dossier' : 'research dossier'}: ${topic}`,
-    researchMode: mode,
+    title: `AutoScholar ${researchMode === 'forecast' ? 'forecast dossier' : 'research dossier'}: ${topic}`,
+    researchMode,
+    topicProfile,
     executiveSummary: llmResult.executiveSummary,
     researchQuestion: llmResult.researchQuestion || topic,
     methodology: llmResult.methodology,
@@ -521,14 +648,15 @@ function buildResearchReport(topic, mode, evidenceBundle, llmResult, extractedAs
     nextResearchActions: safeArray(llmResult.nextResearchActions, []),
     scenarios: safeArray(llmResult.scenarios, []),
     timeline: safeArray(llmResult.timeline, []),
+    domainSections: llmResult.domainSections || null,
     parliament: safeArray(llmResult.parliament, []),
-    evidenceTable: safeArray(llmResult.evidenceTable, []),
-    paymentEvidenceTable: safeArray(llmResult.paymentEvidenceTable, []),
-    quality: llmResult.quality || { evidenceCoverage: evidenceBundle.researchEvidence.length, synthesisMode: 'unknown', confidence: 'unknown' },
+    evidenceTable: buildEvidenceTable(evidenceBundle.topicEvidence),
+    paymentEvidenceTable: buildEvidenceTable(evidenceBundle.paymentEvidence),
+    quality: llmResult.quality || { evidenceCoverage: evidenceBundle.topicEvidence.length, synthesisMode: 'unknown', confidence: 'unknown' },
     paymentRail: PAYMENT_RAIL,
     paymentFlow: buildPaymentFlow(),
     extractedAssets,
-    citations: evidenceBundle.researchEvidence.map((paper, index) => ({
+    citations: evidenceBundle.topicEvidence.map((paper, index) => ({
       ref: `[${index + 1}]`,
       title: paper.title,
       authors: paper.authors,
@@ -549,7 +677,7 @@ function buildResearchReport(topic, mode, evidenceBundle, llmResult, extractedAs
 }
 
 app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, service: 'autoscholar-backend', mode: 'v6-ai-parliament' });
+  res.json({ ok: true, service: 'autoscholar-backend', mode: 'v6.1-topic-agnostic' });
 });
 
 app.get('/api/config', (_req, res) => {
@@ -558,9 +686,9 @@ app.get('/api/config', (_req, res) => {
     llmConfigured: Boolean(OPENAI_API_KEY),
     model: OPENAI_MODEL,
     providerBaseUrl: OPENAI_BASE_URL,
-    paperSource: 'topic papers + payment rail knowledge',
+    paperSource: 'topic evidence + payment rail knowledge',
     paymentRail: PAYMENT_RAIL,
-    orchestrationMode: 'AI Parliament (chair + market analyst + infrastructure agent + skeptic)',
+    orchestrationMode: 'topic-aware AI Parliament + x402/Stacks premium unlock',
     requiredEnv: OPENAI_API_KEY ? [] : ['OPENAI_API_KEY']
   });
 });
@@ -577,21 +705,23 @@ app.post('/api/research', async (req, res) => {
 
   try {
     const researchMode = deriveResearchMode(topic);
-    const evidenceBundle = await retrieveEvidence(topic, researchMode);
+    const topicProfile = deriveTopicProfile(topic);
+    const evidenceBundle = await retrieveEvidence(topic, researchMode, topicProfile);
     const id = makeId();
     const job = {
       id,
       topic,
       searchQuery: evidenceBundle.query,
       researchMode,
-      paperSource: 'topic papers + payment rail knowledge',
-      papers: evidenceBundle.researchEvidence,
+      topicProfile,
+      paperSource: 'topic evidence + payment rail knowledge',
+      papers: evidenceBundle.topicEvidence,
       paymentEvidence: evidenceBundle.paymentEvidence,
       status: 'awaiting-payment',
       createdAt: new Date().toISOString(),
       orchestration: {
         manager: 'Manager Molbot',
-        specialists: ['Chair Agent', 'Market Analyst Agent', 'Infrastructure Agent', 'Skeptic Agent', 'Image Extractor Molbot'],
+        specialists: [...topicProfile.specialistRoles.map((r) => r.agent), 'Image Extractor Molbot'],
         meetingStatus: 'scheduled'
       },
       paymentRequest: {
@@ -634,8 +764,8 @@ app.post('/api/jobs/:id/pay', async (req, res) => {
       {
         id: 'asset_1',
         type: 'diagram',
-        title: 'AI Parliament + x402 payment unlock flow',
-        description: 'Simulated diagram showing retrieval, debate, x402 payment challenge, Stacks settlement, and premium report release.'
+        title: 'Research evidence flow + x402 premium unlock',
+        description: 'Simulated diagram showing retrieval, debate, x402 challenge, Stacks settlement, and premium report release.'
       },
       {
         id: 'asset_2',
@@ -650,13 +780,13 @@ app.post('/api/jobs/:id/pay', async (req, res) => {
     jobs.set(job.id, job);
 
     const evidenceBundle = {
-      researchEvidence: job.papers || [],
+      topicEvidence: job.papers || [],
       paymentEvidence: job.paymentEvidence || [],
       combined: [...(job.papers || []), ...(job.paymentEvidence || [])],
       query: job.searchQuery
     };
 
-    const llmResult = await generateReport(job.topic, job.researchMode, evidenceBundle);
+    const llmResult = await generateReport(job.topic, job.researchMode, job.topicProfile, evidenceBundle);
     const usedFallback = llmResult.mode === 'fallback';
 
     job.status = usedFallback ? 'completed_with_fallback' : 'completed';
@@ -676,7 +806,7 @@ app.post('/api/jobs/:id/pay', async (req, res) => {
       providerBaseUrl: OPENAI_BASE_URL,
       error: llmResult.error || null
     };
-    job.report = buildResearchReport(job.topic, job.researchMode, evidenceBundle, llmResult, extractedAssets);
+    job.report = buildResearchReport(job.topic, job.researchMode, job.topicProfile, evidenceBundle, llmResult, extractedAssets);
 
     jobs.set(job.id, job);
     return res.json(job);
