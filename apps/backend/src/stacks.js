@@ -7,17 +7,18 @@ export const STACKS_PAYMENT_MEMO_PREFIX = process.env.STACKS_PAYMENT_MEMO_PREFIX
 
 export function buildStacksPaymentRequest({ jobId, amount, asset }) {
   const selectedAsset = asset || STACKS_PAYMENT_ASSET;
+  const hasContract = Boolean(STACKS_PAYMENT_CONTRACT);
   return {
     network: STACKS_NETWORK,
     apiBase: STACKS_API_BASE,
     recipient: STACKS_RECIPIENT,
     payer: 'user-wallet-connect',
     asset: selectedAsset,
-    assetType: selectedAsset === 'STX' ? 'native-stx' : 'clarity-asset',
+    assetType: selectedAsset === 'STX' && !hasContract ? 'native-stx' : 'clarity-asset',
     amount,
     memo: `${STACKS_PAYMENT_MEMO_PREFIX}:${jobId}`,
-    contract: STACKS_PAYMENT_CONTRACT || null,
-    settlementMethod: STACKS_PAYMENT_CONTRACT ? 'clarity-contract-call' : 'stx-transfer-or-sip10-transfer',
+    contract: STACKS_PAYMENT_CONTRACT || 'ST2AUTOSCHOLARTESTNETTREASURY111111111111111.autoscholar-payments',
+    settlementMethod: 'clarity-contract-call',
     explorerUrl: 'https://explorer.hiro.so/?chain=testnet'
   };
 }
@@ -44,7 +45,7 @@ export async function verifyStacksPayment({ txid, sender, recipient, amount, ass
     memo: memo || null,
     chain: STACKS_NETWORK,
     apiBase: STACKS_API_BASE,
-    verificationTarget: STACKS_PAYMENT_CONTRACT ? 'clarity-contract-state' : 'stacks-transfer',
+    verificationTarget: STACKS_PAYMENT_CONTRACT ? 'clarity-contract-state' : 'clarity-contract-call',
     reason: txid === 'demo-stacks-txid' ? null : 'real verification not configured yet'
   };
 }

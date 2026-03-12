@@ -1,6 +1,6 @@
 # AutoScholar
 
-AutoScholar is an x402-powered deep research agent network prototype for DoraHacks BUIDL Battle 2. In V7.1, the premium unlock path is aligned to Stacks testnet with a simulated platform treasury address, user-wallet-as-payer model, and a Clarity-oriented payment structure that can later evolve from native STX transfer into contract-based verification.
+AutoScholar is an x402-powered deep research agent network prototype for DoraHacks BUIDL Battle 2. In V7.2, the premium unlock path is modeled as a Clarity contract payment flow on Stacks testnet, with explicit contract principal, function signature, post-conditions, replay key, and a verification plan attached to each x402 challenge.
 
 It demonstrates this flow:
 - a **Manager Molbot** receives a complex research request

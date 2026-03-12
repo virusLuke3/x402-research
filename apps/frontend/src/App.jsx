@@ -221,6 +221,8 @@ export default function App() {
                     <li>Stacks network: {job.paymentRequest.stacks?.network}</li>
                     <li>Stacks API: {job.paymentRequest.stacks?.apiBase}</li>
                     <li>Settlement method: {job.paymentRequest.stacks?.settlementMethod}</li>
+                    <li>Clarity contract: {job.paymentRequest.clarity?.contractPrincipal}</li>
+                    <li>Clarity function: {job.paymentRequest.clarity?.publicFunction}</li>
                     <li>Memo: {job.paymentRequest.stacks?.memo}</li>
                   </ul>
                   <button onClick={payAndComplete} disabled={loading}>
@@ -259,6 +261,18 @@ export default function App() {
                       <li>Contract language: Clarity</li>
                     </ul>
                   </SectionCard>
+
+                  {job.paymentRequest?.verificationPlan ? (
+                    <SectionCard title="Clarity verification plan">
+                      <ul className="list compact">
+                        <li>Mode: {job.paymentRequest.verificationPlan.mode}</li>
+                        <li>Replay key: {job.paymentRequest.verificationPlan.replayKey}</li>
+                        {(job.paymentRequest.verificationPlan.checks || []).map((item, index) => (
+                          <li key={`${item}-${index}`}>{item}</li>
+                        ))}
+                      </ul>
+                    </SectionCard>
+                  ) : null}
 
                   <div className="columns">
                     <SectionCard title="Key findings">

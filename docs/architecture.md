@@ -2,7 +2,7 @@
 
 ## Current MVP Architecture
 
-AutoScholar currently uses a hybrid implementation where research content and payment rail are intentionally separated: the user topic drives retrieval and debate, while x402 + Stacks powers premium unlock and settlement semantics. In V7.1, the payment model is fixed to Stacks testnet, the recipient is modeled as a platform treasury address, the payer is modeled as a connected user wallet, and the settlement path is explicitly structured for future Clarity-smart-contract integration.
+AutoScholar currently uses a hybrid implementation where research content and payment rail are intentionally separated: the user topic drives retrieval and debate, while x402 + Stacks powers premium unlock and settlement semantics. In V7.2, the payment model is elevated into a Clarity-contract path scaffold, with explicit contract principal, public function, expected args, post-conditions, replay protection key, and contract-oriented verification steps.
 
 - **Frontend**: React + Vite dashboard
 - **Backend**: Express manager service

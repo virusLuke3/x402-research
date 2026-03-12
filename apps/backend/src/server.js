@@ -7,6 +7,7 @@ import express from 'express';
 import cors from 'cors';
 import { buildStacksPaymentRequest, verifyStacksPayment, STACKS_NETWORK, STACKS_API_BASE } from './stacks.js';
 import { buildX402Challenge, buildX402Headers } from './x402.js';
+import { buildClarityPaymentSpec, buildClarityVerificationPlan } from './clarity-payment.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -37,7 +38,8 @@ const PAYMENT_RAIL = {
   stacks: {
     network: STACKS_NETWORK,
     apiBase: STACKS_API_BASE,
-    verificationMode: 'real-ready-scaffold'
+    verificationMode: 'clarity-contract-path-scaffold',
+    contractLanguage: 'Clarity'
   }
 };
 
@@ -710,7 +712,7 @@ app.get('/api/config', (_req, res) => {
     stacksIntegration: {
       network: STACKS_NETWORK,
       apiBase: STACKS_API_BASE,
-      verification: 'txid-proof-scaffold',
+      verification: 'clarity-contract-path-scaffold',
       recipientModel: 'platform-treasury-address',
       payerModel: 'user-wallet-connect',
       contractLanguage: 'Clarity'
@@ -735,6 +737,15 @@ app.post('/api/research', async (req, res) => {
     const evidenceBundle = await retrieveEvidence(topic, researchMode, topicProfile);
     const id = makeId();
     const stacksPayment = buildStacksPaymentRequest({ jobId: id, amount: '0.5', asset: process.env.STACKS_PAYMENT_ASSET || 'STX' });
+    const clarityPayment = buildClarityPaymentSpec({
+      jobId: id,
+      recipient: stacksPayment.recipient,
+      amount: '0.5',
+      asset: stacksPayment.asset,
+      memo: stacksPayment.memo,
+      contract: stacksPayment.contract
+    });
+    stacksPayment.clarity = clarityPayment;
     const x402Challenge = buildX402Challenge({ jobId: id, amount: '0.5', asset: stacksPayment.asset, paymentRequest: stacksPayment });
     const job = {
       id,
@@ -764,7 +775,9 @@ app.post('/api/research', async (req, res) => {
         specialist: 'Image Extractor Molbot',
         reason: 'Premium synthesis, AI Parliament debate, and extracted assets unlock after payment.',
         stacks: stacksPayment,
-        x402: x402Challenge
+        clarity: clarityPayment,
+        x402: x402Challenge,
+        verificationPlan: buildClarityVerificationPlan({ ...stacksPayment, clarity: clarityPayment })
       },
       extractedAssets: [],
       report: null
@@ -842,7 +855,7 @@ app.post('/api/jobs/:id/pay', async (req, res) => {
         chain: job.paymentRequest.stacks.network,
         apiBase: job.paymentRequest.stacks.apiBase,
         memo: job.paymentRequest.stacks.memo,
-        verificationTarget: job.paymentRequest.stacks.contract ? 'clarity-contract-state' : 'stacks-transfer'
+        verificationTarget: 'clarity-contract-call'
       };
     }
 
