@@ -98,6 +98,25 @@ export default function App() {
     }
   }
 
+  async function consumePayment() {
+    if (!job?.id) return;
+    setLoading(true);
+    setError('');
+    try {
+      const result = await request(`/api/jobs/${job.id}/consume`, {
+        method: 'POST',
+        body: JSON.stringify({})
+      });
+      setContractState(result.contractState);
+      setJob((prev) => prev ? ({ ...prev, paymentReceipt: result.paymentReceipt, contractState: result.contractState }) : prev);
+      await refreshJobs();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <div className="page">
       <header className="hero">
@@ -294,6 +313,9 @@ export default function App() {
                         <li>Adapter source: {contractState?.source}</li>
                         <li>Timeline: {((contractState?.stateMachine || job.paymentReceipt?.stateMachine) || []).join(' → ')}</li>
                       </ul>
+                      {(contractState?.nextAction === 'consume-payment' || job.paymentReceipt?.nextContractAction === 'consume-payment') ? (
+                        <button onClick={consumePayment} disabled={loading}>Mark premium unlock consumed</button>
+                      ) : null}
                     </SectionCard>
                   ) : null}
 

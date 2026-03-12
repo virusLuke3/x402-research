@@ -8,7 +8,7 @@ import cors from 'cors';
 import { buildStacksPaymentRequest, verifyStacksPayment, STACKS_NETWORK, STACKS_API_BASE } from './stacks.js';
 import { buildX402Challenge, buildX402Headers } from './x402.js';
 import { buildClarityPaymentSpec, buildClarityVerificationPlan } from './clarity-payment.js';
-import { readContractInvoiceState, seedContractInvoiceState, markContractInvoicePaid } from './contract-state.js';
+import { readContractInvoiceState, seedContractInvoiceState, markContractInvoicePaid, markContractInvoiceConsumed } from './contract-state.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -965,6 +965,35 @@ app.get('/api/jobs/:id/contract-state', async (req, res) => {
   });
 
   return res.json(state);
+});
+
+app.post('/api/jobs/:id/consume', async (req, res) => {
+  const job = jobs.get(req.params.id);
+  if (!job) {
+    return res.status(404).json({ error: 'job not found' });
+  }
+
+  if (!job.paymentReceipt) {
+    return res.status(400).json({ error: 'job is not paid yet' });
+  }
+
+  job.contractState = await markContractInvoiceConsumed({
+    jobId: job.id,
+    paymentRequest: job.paymentRequest,
+    paymentReceipt: {
+      ...job.paymentReceipt,
+      invoiceStatus: 'consumed',
+      nextContractAction: null
+    }
+  });
+
+  job.paymentReceipt = {
+    ...job.paymentReceipt,
+    invoiceStatus: 'consumed',
+    nextContractAction: null
+  };
+  jobs.set(job.id, job);
+  return res.json({ ok: true, contractState: job.contractState, paymentReceipt: job.paymentReceipt });
 });
 
 const server = app.listen(PORT, () => {

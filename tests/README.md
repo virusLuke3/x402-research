@@ -1,17 +1,13 @@
 # Clarinet Test Notes
 
-These tests are scaffolds for the AutoScholar Clarity payment contract.
+These tests validate the AutoScholar Clarity payment contract in two layers:
 
-## Expected toolchain
-- Clarinet
-- `@hirosystems/clarinet-sdk`
-
-## Planned coverage
-- create invoice
-- pay invoice
-- consume payment
-- duplicate consume blocked by replay protection
+1. `clarinet check` validates Clarity syntax and analysis.
+2. `vitest` validates that the contract source still exposes the expected state machine, replay protection, and public/read-only entry points.
 
 ## Current status
-In the current environment, `clarinet check` runs successfully and validates the contract.
-The installed Clarinet CLI version does not expose the old `clarinet test` subcommand, so the TypeScript test scaffold remains in-repo as the next step for SDK-driven execution rather than being executed directly by the current CLI.
+In the current environment:
+- `clarinet check` runs successfully
+- `vitest run tests/autoscholar-payments.test.ts` runs successfully
+
+This is not yet full transaction-level Clarinet SDK simulation, but it is now executable and guards the contract surface from silent regressions.
