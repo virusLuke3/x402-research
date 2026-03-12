@@ -29,7 +29,7 @@ function SectionCard({ title, children }) {
 }
 
 export default function App() {
-  const [topic, setTopic] = useState('Produce a research-grade report on the latest ZK rollup papers, with architecture-level analysis, evaluation tradeoffs, and diagram-oriented system understanding.');
+  const [topic, setTopic] = useState('Produce a research-grade technical report on x402 protocol design and Stacks-based settlement for agent-to-agent payments, covering USDCx, sBTC, SIP-10 asset flow, payment challenges, and the architecture of a multi-agent service network.');
   const [job, setJob] = useState(null);
   const [jobs, setJobs] = useState([]);
   const [config, setConfig] = useState(null);
@@ -95,11 +95,12 @@ export default function App() {
   return (
     <div className="page">
       <header className="hero">
-        <span className="badge">AutoScholar V2 · Research Dossier Mode</span>
+        <span className="badge">AutoScholar V4 · x402 + Stacks Intelligence Console</span>
         <h1>The x402-Powered Agentic Research Network</h1>
         <p>
-          This iteration upgrades the demo from a simple summary flow to a multi-agent research dossier:
-          manager orchestration, paid specialist unlock, structured evidence review, and academic-style synthesis.
+          This iteration reframes the project around x402 protocol design and Stacks-native settlement:
+          the demo now presents a technical intelligence console for agent payments, Stacks asset flow,
+          committee review, and protocol-oriented research synthesis.
         </p>
       </header>
 
@@ -219,6 +220,16 @@ export default function App() {
                       <p>{job.report.methodology}</p>
                     </SectionCard>
                   </div>
+
+                  <SectionCard title="x402 / Stacks protocol focus">
+                    <ul className="list compact">
+                      <li>Challenge standard: {job.report.protocolFocus?.challengeStandard}</li>
+                      <li>Settlement layer: {job.report.protocolFocus?.settlementLayer}</li>
+                      <li>Settlement assets: {(job.report.protocolFocus?.settlementAssets || []).join(', ')}</li>
+                      <li>Authorization model: {job.report.protocolFocus?.authorizationModel}</li>
+                      <li>Specialist pattern: {job.report.protocolFocus?.specialistPattern}</li>
+                    </ul>
+                  </SectionCard>
 
                   <div className="columns">
                     <SectionCard title="Key findings">

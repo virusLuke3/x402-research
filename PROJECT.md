@@ -1,7 +1,7 @@
 # Project Management
 
 ## Goal
-Build a hackathon-ready MVP for AutoScholar based on GUIDE.md.
+Build a hackathon-ready MVP for AutoScholar based on GUIDE.md, with x402 protocol design and Stacks-native settlement as the core product story.
 
 ## Current MVP Scope
 - [x] Create repo guide and project framing

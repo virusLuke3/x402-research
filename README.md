@@ -1,6 +1,6 @@
 # AutoScholar
 
-AutoScholar is an x402-powered agentic research network prototype for DoraHacks BUIDL Battle 2.
+AutoScholar is an x402-powered agentic research network prototype for DoraHacks BUIDL Battle 2, now explicitly centered on x402 protocol design and Stacks-native settlement for agent-to-agent payments.
 
 It demonstrates this flow:
 - a **Manager Molbot** receives a complex research request
@@ -44,7 +44,7 @@ Current local setup uses:
 - TuZi OpenAI-compatible API at `https://api.tu-zi.com/v1`
 - model `gpt-5.4`
 - paper source `arXiv`
-- simulated chain payment
+- simulated x402 challenge + Stacks-style chain payment
 
 ### Run
 

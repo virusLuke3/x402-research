@@ -2,7 +2,7 @@
 
 ## Current MVP Architecture
 
-AutoScholar currently uses a hybrid implementation:
+AutoScholar currently uses a hybrid implementation oriented around x402 protocol research and Stacks settlement design:
 
 - **Frontend**: React + Vite dashboard
 - **Backend**: Express manager service
