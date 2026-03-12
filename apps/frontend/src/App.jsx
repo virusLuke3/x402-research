@@ -16,28 +16,63 @@ const JUDGE_CRITERIA = [
   {
     key: 'innovation',
     title: 'Innovation',
-    description: 'Turns HTTP 402 into a machine-payable research unlock, instead of another generic chat wrapper.'
+    description: 'Treats HTTP 402 as a machine-readable capability unlock for agents, not a web-payment gimmick.'
   },
   {
     key: 'technical',
     title: 'Technical depth',
-    description: 'Combines retrieval, multi-agent synthesis, markdown dossier generation, and payment-gated capability release.'
+    description: 'Combines retrieval, multi-agent synthesis, settlement semantics, and premium capability release in one protocol flow.'
   },
   {
     key: 'stacks',
     title: 'Stacks alignment',
-    description: 'Surfaces Clarity contract flow, testnet settlement semantics, STX / sBTC / USDCx positioning, and stacks-style verification.'
+    description: 'Uses Stacks-flavored payment semantics, Clarity invoice lifecycle, and STX / sBTC / USDCx positioning.'
   },
   {
     key: 'ux',
     title: 'User experience',
-    description: 'Topic → unlock → readable dossier. No prompt leakage, no tool spam, no chain complexity dumped on the user.'
+    description: 'Lets humans and future molbots consume paid outputs without drowning in prompts, wallets, or system internals.'
   },
   {
     key: 'impact',
     title: 'Impact potential',
-    description: 'Useful as a premium research primitive for Stacks-native apps, agents, and developer tooling.'
+    description: 'Extends naturally from premium reports to paid specialist molbots, shopping agents, and machine-to-machine services.'
   }
+];
+
+const MOLBOT_SERVICES = [
+  {
+    name: 'Security Analyst Molbot',
+    asset: 'USDCx + x402',
+    role: 'High-quality contract review, exploit triage, and premium vulnerability dossiers.',
+    signal: 'Specialized paid skill agent'
+  },
+  {
+    name: 'Shopping Molbot',
+    asset: 'sBTC + x402',
+    role: 'Executes budgeted shopping or tool procurement on behalf of another agent.',
+    signal: 'Molbot that can pay and get paid'
+  },
+  {
+    name: 'Content Forge Molbot',
+    asset: 'USDCx + x402',
+    role: 'Produces premium content, research briefs, and long-form outputs only after verified payment.',
+    signal: 'Creative agent commerce'
+  },
+  {
+    name: 'Coordinator Molbot',
+    asset: 'STX / mixed rails',
+    role: 'Delegates work to specialists, collects invoices, and releases downstream capabilities.',
+    signal: 'Agent-to-agent orchestration layer'
+  }
+];
+
+const COMMERCE_FLOW = [
+  'Manager molbot decomposes a user request into specialist tasks.',
+  'A specialist molbot returns an x402 challenge with price, asset, and capability terms.',
+  'Another molbot or user settles via Stacks-flavored payment semantics.',
+  'Clarity invoice state moves from created → paid → consumed.',
+  'The paid molbot releases premium output, tools, or delegated capabilities.'
 ];
 
 async function request(path, options = {}) {
@@ -163,21 +198,19 @@ export default function App() {
     ];
   }, [job, topicLength]);
 
-  const summaryStats = useMemo(() => {
-    return {
-      mode: job?.researchMode || 'analysis',
-      papers: job?.papers?.length || 0,
-      paymentEvidence: job?.paymentEvidence?.length || 0,
-      status: job?.status || 'idle'
-    };
-  }, [job]);
+  const summaryStats = useMemo(() => ({
+    mode: job?.researchMode || 'analysis',
+    papers: job?.papers?.length || 0,
+    paymentEvidence: job?.paymentEvidence?.length || 0,
+    status: job?.status || 'idle'
+  }), [job]);
 
   const stacksSummary = useMemo(() => {
     const payment = job?.paymentRequest;
     const stacks = payment?.stacks;
     return {
       network: stacks?.network || 'testnet scaffold',
-      asset: payment?.asset || 'STX / USDCx / sBTC-ready',
+      asset: payment?.asset || 'STX / sBTC / USDCx-ready',
       contract: stacks?.contract || 'autoscholar-payments.clar',
       unlock: payment?.type || 'x402 capability unlock'
     };
@@ -199,8 +232,8 @@ export default function App() {
         <div className="brandLockup">
           <span className="brandMark" aria-hidden="true">◈</span>
           <div>
-            <p className="brandName">AutoScholar V8.0</p>
-            <p className="brandSub">Stacks-aligned x402 research console</p>
+            <p className="brandName">AutoScholar V8.1</p>
+            <p className="brandSub">Molbot commerce protocol on x402 + Stacks</p>
           </div>
         </div>
         <div className="topbarMeta">
@@ -212,11 +245,11 @@ export default function App() {
       <section className="heroSplit panel">
         <div className="heroMain stack-lg">
           <div className="heroHead stack-sm">
-            <span className="eyebrow">Premium research workflow</span>
-            <h1>A Stacks-native research product, not just a research demo.</h1>
+            <span className="eyebrow">Agentic commerce on Stacks</span>
+            <h1>Build the payment rail for molbots that delegate, settle, and unlock skills.</h1>
             <p className="heroText">
-              AutoScholar V8.0 frames the project for judges: a payment-gated research engine where x402 handles capability unlocks,
-              Stacks provides settlement semantics, Clarity models invoice state, and users receive a clean final dossier instead of raw agent chatter.
+              V8.1 shifts the story from “paid report demo” to a broader protocol vision: specialized molbots charging for skills,
+              manager molbots delegating tasks, and machine-to-machine payment unlocks using x402 on top of Stacks settlement semantics.
             </p>
           </div>
 
@@ -259,15 +292,51 @@ export default function App() {
         <div className="sectionHeader sectionHeader-start judgeBoardHeader">
           <div>
             <p className="panelKicker">Judge-facing framing</p>
-            <h2>How this version maps to the hackathon scorecard</h2>
+            <h2>How V8.1 maps to the hackathon scorecard</h2>
           </div>
-          <p className="helperText judgeBoardHint">Built to make innovation, Stacks alignment, and demo credibility legible in under one minute.</p>
+          <p className="helperText judgeBoardHint">This version is optimized to show innovation, Stacks alignment, and molbot-to-molbot commerce potential fast.</p>
         </div>
 
         <div className="judgeGrid">
           {JUDGE_CRITERIA.map((item) => (
             <JudgeCard key={item.key} title={item.title} description={item.description} />
           ))}
+        </div>
+      </section>
+
+      <section className="commerceBoard panel">
+        <div className="sectionHeader sectionHeader-start judgeBoardHeader">
+          <div>
+            <p className="panelKicker">Molbot commerce vision</p>
+            <h2>Specialized skill molbots that can charge, delegate, and unlock capabilities</h2>
+          </div>
+          <p className="helperText judgeBoardHint">This is the “think big” layer: a protocol for paid agent coordination, not just one app screen.</p>
+        </div>
+
+        <div className="commerceGrid">
+          {MOLBOT_SERVICES.map((item) => (
+            <article key={item.name} className="serviceCard miniPanel">
+              <p className="panelKicker">{item.signal}</p>
+              <h3>{item.name}</h3>
+              <p className="serviceRole">{item.role}</p>
+              <span className="serviceAsset">{item.asset}</span>
+            </article>
+          ))}
+        </div>
+
+        <div className="flowPanel panelInset">
+          <div className="sectionHeader sectionHeader-start flowPanelHeader">
+            <div>
+              <p className="panelKicker">Protocol flow</p>
+              <h2>How molbots interact using x402 on Stacks</h2>
+            </div>
+          </div>
+
+          <ol className="commerceFlowList">
+            {COMMERCE_FLOW.map((step) => (
+              <li key={step}>{step}</li>
+            ))}
+          </ol>
         </div>
       </section>
 
@@ -329,12 +398,12 @@ export default function App() {
               </ul>
             </article>
             <article className="miniPanel infoPanel">
-              <p className="panelKicker">Intentionally hidden</p>
+              <p className="panelKicker">Why this matters for molbots</p>
               <ul className="list compact">
-                <li>Intermediate chain-of-thought</li>
-                <li>Internal tool reasoning</li>
-                <li>Prompt internals and diagnostics</li>
-                <li>Noisy agent coordination traces</li>
+                <li>Capability release is machine-readable.</li>
+                <li>Paid specialist outputs can be delegated downstream.</li>
+                <li>Pricing can vary by skill, rail, and trust model.</li>
+                <li>Same protocol can power research, shopping, and content agents.</li>
               </ul>
             </article>
           </div>
@@ -357,22 +426,24 @@ export default function App() {
               <AlignmentRow label="Clarity contract" value={stacksSummary.contract} />
             </div>
 
+            <div className="miniPanel lifecyclePanel">
+              <p className="panelKicker">Clarity invoice lifecycle</p>
+              <div className="lifecycleTrack">
+                <span className="lifecycleStep is-active">created</span>
+                <span className="lifecycleArrow">→</span>
+                <span className={`lifecycleStep ${job?.paymentReceipt ? 'is-active' : ''}`}>paid</span>
+                <span className="lifecycleArrow">→</span>
+                <span className={`lifecycleStep ${job?.paymentReceipt?.invoiceStatus === 'consumed' ? 'is-active' : ''}`}>consumed</span>
+              </div>
+            </div>
+
             <div className="miniPanel">
               <p className="panelKicker">Why this matters to judges</p>
               <ul className="list compact">
                 <li>Shows explicit Clarity invoice-state modeling, not vague “blockchain integration”.</li>
                 <li>Keeps x402 as the capability release layer and Stacks as the settlement semantics layer.</li>
                 <li>Leaves room for sBTC / USDCx expansion without changing the user-facing flow.</li>
-                <li>Makes technical depth legible to both Stacks experts and general product judges.</li>
-              </ul>
-            </div>
-
-            <div className="miniPanel">
-              <p className="panelKicker">Next unlocks for V8+</p>
-              <ul className="list compact">
-                <li>Wallet-connected real testnet payment verification</li>
-                <li>Deployed Clarity contract with live state reads</li>
-                <li>Exportable audit / protocol briefing modes</li>
+                <li>Makes technical depth legible to both Stacks experts and general judges.</li>
               </ul>
             </div>
           </div>

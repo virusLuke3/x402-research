@@ -721,3 +721,115 @@ textarea:focus {
     grid-template-columns: 1fr;
   }
 }
+
+
+.commerceBoard {
+  padding: 22px;
+  margin-bottom: 18px;
+}
+
+.commerceGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.serviceCard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 188px;
+}
+
+.serviceCard h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.serviceRole {
+  color: var(--text-dim);
+  line-height: 1.7;
+}
+
+.serviceAsset {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  min-height: 30px;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid rgba(87,255,226,0.18);
+  background: rgba(87,255,226,0.06);
+  color: #c5fff1;
+  font-size: 0.74rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.flowPanelHeader {
+  margin-bottom: 10px;
+}
+
+.commerceFlowList {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  line-height: 1.75;
+  color: var(--text-dim);
+}
+
+.lifecyclePanel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.lifecycleTrack {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.lifecycleStep {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0.4rem 0.78rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,0.03);
+  color: var(--text-dim);
+  font-size: 0.74rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.lifecycleStep.is-active {
+  color: #041015;
+  background: linear-gradient(135deg, var(--accent), #c2fff2);
+  border-color: rgba(87,255,226,0.28);
+}
+
+.lifecycleArrow {
+  color: var(--text-dim);
+}
+
+@media (max-width: 1240px) {
+  .commerceGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .commerceBoard {
+    padding: 16px;
+  }
+
+  .commerceGrid {
+    grid-template-columns: 1fr;
+  }
+}
