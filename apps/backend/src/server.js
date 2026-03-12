@@ -5,6 +5,8 @@ import { spawn } from 'child_process';
 import fs from 'fs';
 import express from 'express';
 import cors from 'cors';
+import { buildStacksPaymentRequest, verifyStacksPayment, STACKS_NETWORK, STACKS_API_BASE } from './stacks.js';
+import { buildX402Challenge, buildX402Headers } from './x402.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -31,7 +33,12 @@ const PAYMENT_RAIL = {
   settlementAssets: ['USDCx', 'sBTC'],
   authorizationModel: 'payment-gated specialist access after verified settlement',
   specialistPattern: 'manager + paid molbot + post-payment capability release',
-  queryUnlock: 'Research query creation is free; report synthesis, debate transcripts, and specialist assets unlock after x402 payment.'
+  queryUnlock: 'Research query creation is free; report synthesis, debate transcripts, and specialist assets unlock after x402 payment.',
+  stacks: {
+    network: STACKS_NETWORK,
+    apiBase: STACKS_API_BASE,
+    verificationMode: 'real-ready-scaffold'
+  }
 };
 
 const TOPIC_FRAMEWORKS = {
@@ -342,10 +349,20 @@ function buildPaymentFlow() {
   return [
     'User submits an arbitrary research question.',
     'Manager agent retrieves topic evidence and prepares the committee meeting.',
-    'Backend returns an x402 payment challenge for premium synthesis.',
-    'User pays in simulated Stacks-native settlement flow (USDCx / sBTC narrative).',
-    'Specialist agents, debate transcript, and premium report unlock after payment verification.'
+    'Backend returns an x402 payment challenge carrying Stacks settlement details.',
+    'User pays through a Stacks settlement path (USDCx / sBTC / STX-compatible narrative depending on configuration).',
+    'Backend verifies the Stacks payment proof / txid and unlocks specialist outputs after verification.'
   ];
+}
+
+function buildAgentIdentity(roleSpec, topicProfile) {
+  return {
+    agent: roleSpec.agent,
+    role: roleSpec.role,
+    persona: `${roleSpec.agent} is part of the ${topicProfile.label} panel and must stay within its remit.`,
+    authority: roleSpec.role,
+    paymentCapability: roleSpec.agent === 'Chair Agent' ? 'can-request-premium-synthesis' : 'advisory-only'
+  };
 }
 
 async function callLLM(messages, temperature = 0.1) {
@@ -637,6 +654,7 @@ function buildResearchReport(topic, researchMode, topicProfile, evidenceBundle, 
     title: `AutoScholar ${researchMode === 'forecast' ? 'forecast dossier' : 'research dossier'}: ${topic}`,
     researchMode,
     topicProfile,
+    panelIdentities: topicProfile.specialistRoles.map((roleSpec) => buildAgentIdentity(roleSpec, topicProfile)),
     executiveSummary: llmResult.executiveSummary,
     researchQuestion: llmResult.researchQuestion || topic,
     methodology: llmResult.methodology,
@@ -689,6 +707,11 @@ app.get('/api/config', (_req, res) => {
     paperSource: 'topic evidence + payment rail knowledge',
     paymentRail: PAYMENT_RAIL,
     orchestrationMode: 'topic-aware AI Parliament + x402/Stacks premium unlock',
+    stacksIntegration: {
+      network: STACKS_NETWORK,
+      apiBase: STACKS_API_BASE,
+      verification: 'txid-proof-scaffold'
+    },
     requiredEnv: OPENAI_API_KEY ? [] : ['OPENAI_API_KEY']
   });
 });
@@ -708,6 +731,8 @@ app.post('/api/research', async (req, res) => {
     const topicProfile = deriveTopicProfile(topic);
     const evidenceBundle = await retrieveEvidence(topic, researchMode, topicProfile);
     const id = makeId();
+    const stacksPayment = buildStacksPaymentRequest({ jobId: id, amount: '0.5', asset: 'USDCx' });
+    const x402Challenge = buildX402Challenge({ jobId: id, amount: '0.5', asset: 'USDCx', paymentRequest: stacksPayment });
     const job = {
       id,
       topic,
@@ -722,16 +747,19 @@ app.post('/api/research', async (req, res) => {
       orchestration: {
         manager: 'Manager Molbot',
         specialists: [...topicProfile.specialistRoles.map((r) => r.agent), 'Image Extractor Molbot'],
+        identities: topicProfile.specialistRoles.map((r) => buildAgentIdentity(r, topicProfile)),
         meetingStatus: 'scheduled'
       },
       paymentRequest: {
         type: 'x402',
         asset: 'USDCx',
         amount: '0.5',
-        recipient: 'STX-DEMO-RECIPIENT',
+        recipient: stacksPayment.recipient,
         challenge: 'HTTP 402 Payment Required',
         specialist: 'Image Extractor Molbot',
-        reason: 'Premium synthesis, AI Parliament debate, and extracted assets unlock after payment.'
+        reason: 'Premium synthesis, AI Parliament debate, and extracted assets unlock after payment.',
+        stacks: stacksPayment,
+        x402: x402Challenge
       },
       extractedAssets: [],
       report: null
@@ -751,15 +779,62 @@ app.post('/api/jobs/:id/pay', async (req, res) => {
   }
 
   const token = req.header('x-payment-token') || req.body?.paymentToken;
-  if (token !== DEMO_PAYMENT_TOKEN) {
+  if (token !== DEMO_PAYMENT_TOKEN && !req.body?.txid) {
+    const headers = buildX402Headers(job.paymentRequest.x402);
+    Object.entries(headers).forEach(([key, value]) => res.setHeader(key, value));
     return res.status(402).json({
       error: 'payment required',
-      message: 'Provide a valid demo payment token to unlock the AI Parliament report.',
-      expectedHeader: 'x-payment-token'
+      message: 'Provide a valid demo payment token or a Stacks transaction proof to unlock the AI Parliament report.',
+      expectedHeader: 'x-payment-token',
+      x402: job.paymentRequest.x402,
+      stacks: job.paymentRequest.stacks
     });
   }
 
   try {
+    let paymentReceipt;
+
+    if (req.body?.txid) {
+      const verification = await verifyStacksPayment({
+        txid: req.body.txid,
+        sender: req.body.sender,
+        recipient: job.paymentRequest.stacks.recipient,
+        amount: job.paymentRequest.amount,
+        asset: job.paymentRequest.asset,
+        memo: job.paymentRequest.stacks.memo
+      });
+
+      if (!verification.ok) {
+        return res.status(402).json({
+          error: 'payment verification failed',
+          verification,
+          x402: job.paymentRequest.x402,
+          stacks: job.paymentRequest.stacks
+        });
+      }
+
+      paymentReceipt = {
+        asset: job.paymentRequest.asset,
+        amount: job.paymentRequest.amount,
+        txid: verification.txid,
+        sender: verification.sender,
+        recipient: verification.recipient,
+        settlement: 'verified-stacks-payment',
+        mode: verification.mode,
+        chain: verification.chain,
+        apiBase: verification.apiBase,
+        memo: verification.memo
+      };
+    } else {
+      paymentReceipt = {
+        asset: 'USDCx',
+        amount: '0.5',
+        txid: 'demo-stacks-txid',
+        settlement: 'mock-success',
+        mode: 'simulated-chain-payment'
+      };
+    }
+
     const extractedAssets = [
       {
         id: 'asset_1',
@@ -792,13 +867,7 @@ app.post('/api/jobs/:id/pay', async (req, res) => {
     job.status = usedFallback ? 'completed_with_fallback' : 'completed';
     job.orchestration.meetingStatus = 'concluded';
     job.paidAt = new Date().toISOString();
-    job.paymentReceipt = {
-      asset: 'USDCx',
-      amount: '0.5',
-      txid: 'demo-stacks-txid',
-      settlement: 'mock-success',
-      mode: 'simulated-chain-payment'
-    };
+    job.paymentReceipt = paymentReceipt;
     job.extractedAssets = extractedAssets;
     job.llm = {
       mode: llmResult.mode,

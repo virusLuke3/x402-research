@@ -1,6 +1,6 @@
 # AutoScholar
 
-AutoScholar is an x402-powered deep research agent network prototype for DoraHacks BUIDL Battle 2. In V6.1, the research topic is topic-agnostic (for example, future forecasting or Solidity vulnerabilities), while x402 + Stacks remains the premium payment and settlement rail that unlocks AI Parliament synthesis.
+AutoScholar is an x402-powered deep research agent network prototype for DoraHacks BUIDL Battle 2. In V7.0, the research topic is topic-agnostic while the premium unlock path is upgraded into a real-ready x402 + Stacks payment scaffold with explicit agent identities, Stacks network metadata, payment memos, and txid-based verification hooks.
 
 It demonstrates this flow:
 - a **Manager Molbot** receives a complex research request

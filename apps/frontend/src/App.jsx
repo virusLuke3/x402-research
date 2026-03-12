@@ -123,6 +123,9 @@ export default function App() {
               <li>Orchestration: {config.orchestrationMode}</li>
               <li>Payment standard: {config.paymentRail?.challengeStandard}</li>
               <li>Settlement layer: {config.paymentRail?.settlementLayer}</li>
+              <li>Stacks network: {config.stacksIntegration?.network}</li>
+              <li>Stacks API: {config.stacksIntegration?.apiBase}</li>
+              <li>Verification mode: {config.stacksIntegration?.verification}</li>
             </ul>
           )}
         </section>
@@ -158,9 +161,25 @@ export default function App() {
               <SectionCard title="Layer separation">
                 <ul className="list compact">
                   <li><strong>Research layer:</strong> retrieve papers, debate, and synthesize the user’s topic.</li>
-                  <li><strong>Payment layer:</strong> x402 challenge + Stacks settlement narrative unlocks premium report generation.</li>
+                  <li><strong>Payment layer:</strong> x402 challenge + Stacks settlement flow unlocks premium report generation.</li>
                 </ul>
               </SectionCard>
+
+              {job.orchestration?.identities?.length ? (
+                <SectionCard title="Agent identities">
+                  <div className="debateList">
+                    {job.orchestration.identities.map((entry, index) => (
+                      <div key={`${entry.agent}-${index}`} className="debateCard">
+                        <strong>{entry.agent}</strong>
+                        <div className="muted">{entry.role}</div>
+                        <p>{entry.persona}</p>
+                        <p><span className="muted">Authority:</span> {entry.authority}</p>
+                        <p><span className="muted">Payment capability:</span> {entry.paymentCapability}</p>
+                      </div>
+                    ))}
+                  </div>
+                </SectionCard>
+              ) : null}
 
               {job.papers?.length ? (
                 <SectionCard title="Topic evidence">
@@ -197,6 +216,9 @@ export default function App() {
                     <li>Amount: {job.paymentRequest.amount}</li>
                     <li>Recipient: {job.paymentRequest.recipient}</li>
                     <li>Challenge: {job.paymentRequest.challenge}</li>
+                    <li>Stacks network: {job.paymentRequest.stacks?.network}</li>
+                    <li>Stacks API: {job.paymentRequest.stacks?.apiBase}</li>
+                    <li>Memo: {job.paymentRequest.stacks?.memo}</li>
                   </ul>
                   <button onClick={payAndComplete} disabled={loading}>
                     {loading ? 'Processing payment…' : 'Pay via x402 + Stacks flow and unlock report'}
@@ -228,6 +250,9 @@ export default function App() {
                       <li>Settlement assets: {(job.report.paymentRail?.settlementAssets || []).join(', ')}</li>
                       <li>Authorization model: {job.report.paymentRail?.authorizationModel}</li>
                       <li>Unlock rule: {job.report.paymentRail?.queryUnlock}</li>
+                      <li>Stacks network: {job.report.paymentRail?.stacks?.network}</li>
+                      <li>Stacks API: {job.report.paymentRail?.stacks?.apiBase}</li>
+                      <li>Verification mode: {job.report.paymentRail?.stacks?.verificationMode}</li>
                     </ul>
                   </SectionCard>
 
