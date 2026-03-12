@@ -31,8 +31,12 @@ export function buildClarityVerificationPlan(paymentRequest) {
       'contract principal matches autoscholar-payments contract',
       'public function is pay-invoice',
       'job-id / amount / asset / memo args match x402 challenge',
-      'job has not already been settled'
+      'invoice status transitions from created to paid',
+      'replay key has not been consumed before premium unlock'
     ],
-    replayKey: paymentRequest.clarity?.replayKey || null
+    stateMachine: ['created', 'paid', 'consumed'],
+    replayKey: paymentRequest.clarity?.replayKey || null,
+    consumeFunction: 'consume-payment',
+    statusReader: 'get-invoice-status'
   };
 }

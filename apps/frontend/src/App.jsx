@@ -262,11 +262,25 @@ export default function App() {
                     </ul>
                   </SectionCard>
 
+                  {job.report.paymentContract ? (
+                    <SectionCard title="Payment contract state machine">
+                      <ul className="list compact">
+                        <li>Contract principal: {job.report.paymentContract.contractPrincipal}</li>
+                        <li>States: {(job.report.paymentContract.stateMachine || []).join(' → ')}</li>
+                        <li>Read-only functions: {(job.report.paymentContract.readOnlyFns || []).join(', ')}</li>
+                        <li>Public functions: {(job.report.paymentContract.publicFns || []).join(', ')}</li>
+                      </ul>
+                    </SectionCard>
+                  ) : null}
+
                   {job.paymentRequest?.verificationPlan ? (
                     <SectionCard title="Clarity verification plan">
                       <ul className="list compact">
                         <li>Mode: {job.paymentRequest.verificationPlan.mode}</li>
                         <li>Replay key: {job.paymentRequest.verificationPlan.replayKey}</li>
+                        <li>Consume function: {job.paymentRequest.verificationPlan.consumeFunction}</li>
+                        <li>Status reader: {job.paymentRequest.verificationPlan.statusReader}</li>
+                        <li>State machine: {(job.paymentRequest.verificationPlan.stateMachine || []).join(' → ')}</li>
                         {(job.paymentRequest.verificationPlan.checks || []).map((item, index) => (
                           <li key={`${item}-${index}`}>{item}</li>
                         ))}

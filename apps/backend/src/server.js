@@ -674,6 +674,12 @@ function buildResearchReport(topic, researchMode, topicProfile, evidenceBundle, 
     paymentEvidenceTable: buildEvidenceTable(evidenceBundle.paymentEvidence),
     quality: llmResult.quality || { evidenceCoverage: evidenceBundle.topicEvidence.length, synthesisMode: 'unknown', confidence: 'unknown' },
     paymentRail: PAYMENT_RAIL,
+    paymentContract: {
+      contractPrincipal: evidenceBundle.paymentEvidence?.[0]?.sourceType === 'local-kb' ? 'ST2AUTOSCHOLARTESTNETTREASURY111111111111111.autoscholar-payments' : 'ST2AUTOSCHOLARTESTNETTREASURY111111111111111.autoscholar-payments',
+      stateMachine: ['created', 'paid', 'consumed'],
+      readOnlyFns: ['get-invoice', 'get-invoice-status', 'is-paid', 'is-consumed', 'has-replay-key'],
+      publicFns: ['create-invoice', 'pay-invoice', 'consume-payment']
+    },
     paymentFlow: buildPaymentFlow(),
     extractedAssets,
     citations: evidenceBundle.topicEvidence.map((paper, index) => ({
@@ -841,7 +847,10 @@ app.post('/api/jobs/:id/pay', async (req, res) => {
         mode: verification.mode,
         chain: verification.chain,
         apiBase: verification.apiBase,
-        memo: verification.memo
+        memo: verification.memo,
+        verificationTarget: verification.verificationTarget,
+        invoiceStatus: 'paid',
+        nextContractAction: 'consume-payment'
       };
     } else {
       paymentReceipt = {
@@ -855,7 +864,9 @@ app.post('/api/jobs/:id/pay', async (req, res) => {
         chain: job.paymentRequest.stacks.network,
         apiBase: job.paymentRequest.stacks.apiBase,
         memo: job.paymentRequest.stacks.memo,
-        verificationTarget: 'clarity-contract-call'
+        verificationTarget: 'clarity-contract-call',
+        invoiceStatus: 'paid',
+        nextContractAction: 'consume-payment'
       };
     }
 
