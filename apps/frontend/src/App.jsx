@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-const API_BASE = 'http://localhost:8787';
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8787';
 const DEMO_PAYMENT_TOKEN = 'demo-paid-token';
 
 async function request(path, options = {}) {
@@ -108,6 +108,7 @@ export default function App() {
           <h2>Runtime config</h2>
           {!config ? <p>Loading config…</p> : (
             <ul className="list compact">
+              <li>API base: {config.apiBase}</li>
               <li>Paper source: {config.paperSource}</li>
               <li>LLM model: {config.model}</li>
               <li>LLM configured: {String(config.llmConfigured)}</li>
@@ -128,6 +129,11 @@ export default function App() {
               </div>
               <p><strong>Topic:</strong> {job.topic}</p>
               <p><strong>Search query:</strong> {job.searchQuery}</p>
+              {job.llm?.error ? (
+                <p className="error">
+                  LLM fallback engaged: {job.llm.error}
+                </p>
+              ) : null}
 
               {job.papers?.length ? (
                 <div className="report">

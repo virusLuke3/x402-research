@@ -8,7 +8,7 @@ It demonstrates this flow:
 - it delegates a specialist task to a paid **Image Extractor Molbot**
 - the specialist returns an **HTTP 402 Payment Required** challenge
 - the manager simulates Stacks-style settlement
-- a summarizer model is called through an **OpenAI-compatible provider**
+- a summarizer model is called directly from the backend through an **OpenAI-compatible provider**
 - the final research result is returned as a combined report
 
 ## Repo Structure
@@ -56,6 +56,12 @@ This starts:
 - frontend on `http://localhost:5173`
 - backend on `http://localhost:8787`
 
+If you need to point the frontend at a different backend port during local debugging, set:
+
+```bash
+VITE_API_BASE=http://localhost:8790 npm --workspace apps/frontend run dev
+```
+
 ## Demo Flow
 
 1. Open the frontend.
@@ -64,6 +70,7 @@ This starts:
 4. The UI shows the x402-style challenge from the specialist molbot.
 5. Click **Simulate chain payment and continue**.
 6. The backend simulates payment verification, calls the summarizer model, and returns a completed report.
+7. If the provider credentials are invalid, the backend now returns a fallback report instead of failing the whole demo flow.
 
 ## Configuration
 
@@ -84,7 +91,7 @@ Implemented:
 - arXiv paper search
 - x402-style payment challenge flow
 - simulated chain payment receipt
-- OpenAI-compatible summarization through configured provider
+- OpenAI-compatible summarization through backend-native fetch requests to the configured provider
 
 Still simulated / pending:
 - real on-chain Stacks payment verification

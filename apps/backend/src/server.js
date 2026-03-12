@@ -1,7 +1,6 @@
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { spawn } from 'child_process';
 import express from 'express';
 import cors from 'cors';
 
@@ -65,63 +64,111 @@ async function fetchArxivPapers(query) {
   }).filter((paper) => paper.title);
 }
 
+function parseJSONContent(content) {
+  if (typeof content !== 'string') {
+    return null;
+  }
+
+  try {
+    return JSON.parse(content);
+  } catch {
+    const fenced = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)?.[1];
+    if (!fenced) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(fenced);
+    } catch {
+      return null;
+    }
+  }
+}
+
+function buildLocalFallbackSummary(topic, papers, reason = 'LLM unavailable') {
+  return {
+    mode: 'fallback',
+    summary: `${reason}. Returning a locally generated research brief for ${topic}.`,
+    keyFindings: papers.slice(0, 3).map((paper) => `${paper.title} — ${paper.summary.slice(0, 180)}...`),
+    implications: [
+      'Validate provider credentials before the demo to restore model-generated synthesis.',
+      'Use the arXiv shortlist and extracted assets below as the operator-facing fallback result.'
+    ]
+  };
+}
+
 async function generateLLMSummary(topic, papers) {
   if (!OPENAI_API_KEY) {
-    return {
-      mode: 'fallback',
-      summary: `OpenAI-compatible key not configured. Fallback summary for ${topic}.`,
-      keyFindings: papers.slice(0, 3).map((paper) => `${paper.title} — ${paper.summary.slice(0, 180)}...`),
-      implications: []
-    };
+    return buildLocalFallbackSummary(topic, papers, 'OpenAI-compatible key not configured');
   }
 
   const apiUrl = `${OPENAI_BASE_URL.replace(/\/$/, '')}/chat/completions`;
-  const helperPath = path.resolve(__dirname, './llm_tuzi.py');
+  const prompt = [
+    `Produce a concise research summary for topic: ${topic}.`,
+    `Based on these arXiv papers: ${JSON.stringify(papers.slice(0, 5))}.`,
+    'Return JSON only with keys summary, keyFindings, implications.',
+    'summary must be a string.',
+    'keyFindings must be an array of short strings.',
+    'implications must be an array of short strings.'
+  ].join(' ');
 
-  const payload = {
-    api_url: apiUrl,
-    api_key: OPENAI_API_KEY,
-    model: OPENAI_MODEL,
-    topic,
-    papers,
-  };
-
-  return await new Promise((resolve, reject) => {
-    const child = spawn('python3', [helperPath], {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env },
+  try {
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${OPENAI_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: OPENAI_MODEL,
+        messages: [
+          {
+            role: 'user',
+            content: prompt
+          }
+        ],
+        temperature: 0
+      })
     });
 
-    let stdout = '';
-    let stderr = '';
+    const rawText = await response.text();
 
-    child.stdout.on('data', (chunk) => {
-      stdout += chunk.toString();
-    });
+    if (!response.ok) {
+      return {
+        ...buildLocalFallbackSummary(topic, papers, `LLM request failed with status ${response.status}`),
+        error: `LLM request failed with status ${response.status}: ${rawText}`
+      };
+    }
 
-    child.stderr.on('data', (chunk) => {
-      stderr += chunk.toString();
-    });
+    let parsed;
+    try {
+      parsed = JSON.parse(rawText);
+    } catch {
+      return {
+        ...buildLocalFallbackSummary(topic, papers, 'LLM returned non-JSON response'),
+        error: `LLM returned non-JSON response: ${rawText}`
+      };
+    }
 
-    child.on('close', (code) => {
-      if (code !== 0) {
-        return reject(new Error(`LLM helper failed: ${stdout || stderr}`.trim()));
-      }
-      try {
-        const parsed = JSON.parse(stdout);
-        if (!parsed.ok) {
-          return reject(new Error(parsed.error || 'LLM helper returned failure'));
-        }
-        return resolve({ mode: 'llm-python', ...parsed.result });
-      } catch (error) {
-        return reject(new Error(`Failed to parse LLM helper output: ${stdout || stderr}`.trim()));
-      }
-    });
+    const content = parsed?.choices?.[0]?.message?.content ?? parsed?.choices?.[0]?.text ?? '';
+    const result = parseJSONContent(content);
 
-    child.on('error', (error) => reject(error));
-    child.stdin.write(JSON.stringify(payload));
-    child.stdin.end();
-  });
+    if (result) {
+      return { mode: 'llm-fetch', ...result };
+    }
+
+    return {
+      mode: 'llm-fetch',
+      summary: typeof content === 'string' && content.trim() ? content : `Generated summary for ${topic}.`,
+      keyFindings: [],
+      implications: []
+    };
+  } catch (error) {
+    return {
+      ...buildLocalFallbackSummary(topic, papers, 'LLM request errored'),
+      error: error.message || 'unknown llm error'
+    };
+  }
 }
 
 function buildFallbackReport(topic, papers, llmResult, extractedAssets) {
@@ -235,9 +282,13 @@ app.post('/api/jobs/:id/pay', async (req, res) => {
       }
     ];
 
-    const llmResult = await generateLLMSummary(job.topic, job.papers || []);
+    job.status = 'processing';
+    jobs.set(job.id, job);
 
-    job.status = 'completed';
+    const llmResult = await generateLLMSummary(job.topic, job.papers || []);
+    const usedFallback = llmResult.mode === 'fallback';
+
+    job.status = usedFallback ? 'completed_with_fallback' : 'completed';
     job.paidAt = new Date().toISOString();
     job.paymentReceipt = {
       asset: 'USDCx',
@@ -247,12 +298,21 @@ app.post('/api/jobs/:id/pay', async (req, res) => {
       mode: 'simulated-chain-payment'
     };
     job.extractedAssets = extractedAssets;
+    job.llm = {
+      mode: llmResult.mode,
+      model: OPENAI_MODEL,
+      providerBaseUrl: OPENAI_BASE_URL,
+      error: llmResult.error || null
+    };
     job.report = buildFallbackReport(job.topic, job.papers || [], llmResult, extractedAssets);
 
     jobs.set(job.id, job);
     return res.json(job);
   } catch (error) {
-    return res.status(500).json({ error: error.message || 'failed to complete payment flow' });
+    job.status = 'failed';
+    job.error = error.message || 'failed to complete payment flow';
+    jobs.set(job.id, job);
+    return res.status(500).json({ error: job.error });
   }
 });
 
@@ -266,6 +326,16 @@ app.get('/api/jobs/:id', (req, res) => {
   return res.json(job);
 });
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`AutoScholar backend listening on http://localhost:${PORT}`);
+});
+
+server.on('error', (error) => {
+  if (error?.code === 'EADDRINUSE') {
+    console.error(`Port ${PORT} is already in use. Set PORT to a free port and retry.`);
+    process.exit(1);
+  }
+
+  console.error('Backend server failed to start:', error);
+  process.exit(1);
 });

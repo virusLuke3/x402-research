@@ -15,7 +15,7 @@ Build a hackathon-ready MVP for AutoScholar based on GUIDE.md.
 - [ ] Add persistent storage
 - [ ] Add wallet / funding UX
 - [ ] Add demo video assets and screenshots
-- [x] Add TuZi-compatible Python adapter to stabilize LLM calls without proxy interference
+- [x] Replace unstable Python TuZi adapter with backend-native fetch integration
 
 ## Milestones
 
@@ -40,3 +40,4 @@ Pending.
 1. add real payment verification path
 2. add one real specialist endpoint
 3. add submission-facing screenshots and demo script
+4. validate provider credentials before demo so fallback mode is only a safety net
