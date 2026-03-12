@@ -89,6 +89,28 @@ const TOPIC_FRAMEWORKS = {
       authors: ['AutoScholar Topic Framework']
     }
   ],
+  commerce: [
+    {
+      id: 'fw-commerce-001',
+      title: 'Machine-to-machine commerce protocol design on x402 and Stacks',
+      summary: 'A topic scaffold for agentic commerce covering challenge schemas, settlement rails, invoice lifecycle, entitlement release, replay protection, and specialist service pricing.',
+      keywords: ['x402', 'stacks', 'agentic commerce', 'molbot', 'entitlement', 'invoice lifecycle'],
+      sourceType: 'local-framework',
+      category: 'topic-framework',
+      published: '2026-03-12',
+      authors: ['AutoScholar Topic Framework']
+    },
+    {
+      id: 'fw-commerce-002',
+      title: 'Pricing and settlement strategies for specialist molbot services',
+      summary: 'Specialist agent markets should distinguish default rails, high-value rails, and stable-pricing rails. STX can serve as the native default, sBTC for Bitcoin-aligned premium value transfer, and USDCx for predictable service pricing.',
+      keywords: ['USDCx', 'sBTC', 'STX', 'pricing rails', 'specialist service'],
+      sourceType: 'local-framework',
+      category: 'topic-framework',
+      published: '2026-03-12',
+      authors: ['AutoScholar Topic Framework']
+    }
+  ],
   general: [
     {
       id: 'fw-general-001',
@@ -142,6 +164,21 @@ function deriveTopicProfile(topic) {
         { agent: 'Security Researcher Agent', role: 'Vulnerability taxonomy and evidence review' },
         { agent: 'Exploit Analyst Agent', role: 'Attack path and exploit realism analysis' },
         { agent: 'Audit Skeptic Agent', role: 'Challenge weak or overclaimed security conclusions' }
+      ]
+    };
+  }
+
+  if (/(x402|stacks|molbot|agentic commerce|agent-to-agent|usdcx|sbtc|invoice|entitlement|capability unlock|challenge schema|payment rail)/i.test(text)) {
+    return {
+      key: 'commerce',
+      label: 'Agentic Commerce Protocol Research',
+      description: 'Protocol research for molbot-to-molbot commerce, payment rails, capability unlock semantics, and settlement design.',
+      retrieverHint: 'x402 stacks agentic commerce molbot payment rail entitlement invoice lifecycle usdcx sbtc',
+      specialistRoles: [
+        { agent: 'Chair Agent', role: 'Debate chair' },
+        { agent: 'Protocol Economist Agent', role: 'Pricing rails and market design analysis' },
+        { agent: 'Settlement Architect Agent', role: 'Invoice lifecycle and payment verification analysis' },
+        { agent: 'Skeptic Agent', role: 'Challenge weak protocol assumptions and overclaims' }
       ]
     };
   }
@@ -296,7 +333,17 @@ async function retrieveEvidence(topic, researchMode, topicProfile) {
   const topicFramework = buildTopicFrameworkEvidence(topic, topicProfile);
   const paymentRail = buildPaymentRailEvidence(topic, topicProfile);
 
-  const topicEvidence = [...external, ...topicFramework]
+  const filteredExternal = external.filter((item) => {
+    if (topicProfile.key === 'commerce') {
+      return item.evidenceClass === 'topic-core' || /x402|stacks|agent|commerce|payment|invoice|entitlement|sbtc|usdcx/i.test(`${item.title} ${item.summary}`);
+    }
+    if (topicProfile.key === 'general') {
+      return item.evidenceClass !== 'off-topic';
+    }
+    return item.evidenceClass !== 'off-topic' || item.relevanceScore >= 4;
+  });
+
+  const topicEvidence = [...filteredExternal, ...topicFramework]
     .sort((a, b) => b.relevanceScore - a.relevanceScore)
     .slice(0, 6);
 
@@ -395,6 +442,81 @@ function buildMarkdownReferenceLine(citation, index) {
     return `${index + 1}. ${citation.ref} [${citation.title}](${citation.url})${tail ? ` — ${tail}` : ''}`;
   }
   return `${index + 1}. ${citation.ref} ${citation.title}${tail ? ` — ${tail}` : ''}。无公开链接。`;
+}
+
+async function buildReportPlan(topic, researchMode, topicProfile, evidenceBundle, llmResult, topicCitations) {
+  const fallbackPlan = {
+    sections: [
+      { id: 'summary', title: '执行摘要', goal: '概括主题、核心结论与证据边界。', evidenceRefs: ['[1]', '[2]'] },
+      { id: 'method', title: '研究范围与方法', goal: '说明资料来源、筛选范围、综合方法。', evidenceRefs: ['[1]'] },
+      { id: 'core', title: '核心文献解析', goal: '优先解析最重要的 3-5 条证据及其局限。', evidenceRefs: ['[1]', '[2]', '[3]'] },
+      { id: 'review', title: '技术综述 / 现状分析', goal: '整合共识、差异、成熟度与现实意义。', evidenceRefs: ['[1]', '[2]', '[3]', '[4]'] },
+      { id: 'advice', title: '综合判断与实施建议', goal: '给出面向项目落地的建议。', evidenceRefs: ['[1]', '[2]'] },
+      { id: 'limits', title: '风险与局限', goal: '明确证据边界、争议与不足。', evidenceRefs: ['[1]'] },
+      { id: 'future', title: '后续研究方向', goal: '指出下一步应补的证据与工作。', evidenceRefs: ['[1]'] },
+      { id: 'refs', title: '参考文献', goal: '列出所用证据。', evidenceRefs: ['[1]', '[2]', '[3]', '[4]', '[5]'] }
+    ]
+  };
+
+  try {
+    const content = await callLLM([
+      {
+        role: 'system',
+        content: '你是一名学术综述写作规划师。请先为最终报告制定章节计划。严格输出 JSON，包含 sections 数组；每个 section 包含 id、title、goal、evidenceRefs。不要写正文。'
+      },
+      {
+        role: 'user',
+        content: JSON.stringify({
+          topic,
+          researchMode,
+          topicProfile,
+          executiveSummary: llmResult.executiveSummary,
+          keyFindings: llmResult.keyFindings,
+          consensus: llmResult.consensus,
+          limitations: llmResult.limitations,
+          citations: topicCitations.slice(0, 5)
+        })
+      }
+    ], 0.1);
+    const parsed = parseJSONContent(content);
+    return parsed?.sections?.length ? parsed : fallbackPlan;
+  } catch {
+    return fallbackPlan;
+  }
+}
+
+async function reviewReportPlan(topic, llmResult, plan, evidenceBundle) {
+  const fallbackReview = {
+    risks: [
+      'Avoid repeating abstracts paper by paper without synthesis.',
+      'Do not overclaim evidence strength if the topic evidence is sparse.',
+      'Keep x402 / Stacks as infrastructure unless the topic is directly about them.'
+    ],
+    mustInclude: ['evidence strength', 'limitations', 'implementation guidance']
+  };
+
+  try {
+    const content = await callLLM([
+      {
+        role: 'system',
+        content: '你是一名严格的学术审稿人。请检查报告计划可能存在的过度结论、缺失部分和证据边界问题。严格输出 JSON，包含 risks 和 mustInclude。'
+      },
+      {
+        role: 'user',
+        content: JSON.stringify({
+          topic,
+          plan,
+          keyFindings: llmResult.keyFindings,
+          limitations: llmResult.limitations,
+          evidenceStats: buildEvidenceStats(evidenceBundle.topicEvidence)
+        })
+      }
+    ], 0.1);
+    const parsed = parseJSONContent(content);
+    return parsed?.risks?.length ? parsed : fallbackReview;
+  } catch {
+    return fallbackReview;
+  }
 }
 
 function buildFallbackMarkdownReport(topic, researchMode, topicProfile, evidenceBundle, llmResult, topicCitations) {
@@ -499,7 +621,8 @@ async function generateAcademicMarkdownReport(topic, researchMode, topicProfile,
     return buildFallbackMarkdownReport(topic, researchMode, topicProfile, evidenceBundle, llmResult, topicCitations);
   }
 
-  const evidenceForPrompt = evidenceBundle.topicEvidence.map((paper, index) => ({
+  const curatedTopicEvidence = evidenceBundle.topicEvidence.filter((paper) => ['topic-core', 'topic-framework', 'payment-rail'].includes(paper.evidenceClass)).slice(0, 6);
+  const evidenceForPrompt = curatedTopicEvidence.map((paper, index) => ({
     rank: index + 1,
     title: paper.title,
     authors: paper.authors,
@@ -518,11 +641,13 @@ async function generateAcademicMarkdownReport(topic, researchMode, topicProfile,
     role: item.role,
     stance: item.stance
   }));
+  const plan = await buildReportPlan(topic, researchMode, topicProfile, evidenceBundle, llmResult, topicCitations);
+  const review = await reviewReportPlan(topic, llmResult, plan, evidenceBundle);
 
   const systemPrompt = [
     '你是一位资深学术文献综述撰写专家。',
-    '你的任务是把研究证据、AI Parliament 讨论结果与主题判断整合为一篇成熟、完整、逻辑严密、可直接阅读的 Markdown 研究报告。',
-    '写作风格参考 Full-Workflow Multi-Agent Literature Review：先评审证据，再综合共识与分歧，最后输出结构化长报告。',
+    '你的任务是把研究证据、AI Parliament 讨论结果、章节计划与审稿意见整合为一篇成熟、完整、逻辑严密、可直接阅读的 Markdown 研究报告。',
+    '写作风格参考 Full-Workflow Multi-Agent Literature Review：先规划，再审查，再写作。',
     '必须使用严谨中文，避免空话、营销语、模板化套话。',
     '严禁虚构未提供的论文数量、实验结果、引用关系或链上实现细节。',
     '报告必须体现：证据强弱、共识与分歧、研究边界、下一步建议。',
@@ -534,17 +659,14 @@ async function generateAcademicMarkdownReport(topic, researchMode, topicProfile,
     `研究模式：${researchMode}`,
     `主题领域：${topicProfile.label}`,
     '',
-    '写作要求：',
-    '- 输出一份完整的学术风格研究报告，而不是短摘要。',
+    '最终写作要求：',
+    '- 严格按照“先章节规划、后吸收审稿意见、再写正文”的方式组织内容。',
     '- 报告至少包含这些部分：执行摘要、研究范围与方法、核心文献解析、技术综述/现状分析、综合判断与实施建议、风险与局限、后续研究方向、参考文献。',
-    '- 在“核心文献解析”中，优先解析最相关的 3-5 条证据，分别说明：它解决什么问题、对当前主题有什么价值、局限在哪里。',
-    '- 在“技术综述/现状分析”中，要综合不同证据的共性、差异、成熟度，而不是把摘要逐条复述。',
-    '- 在“综合判断与实施建议”中，要给出面向项目落地的可执行建议。',
+    '- 核心文献解析必须优先解析 3-5 条最重要证据，并说明价值与局限。',
+    '- 技术综述部分必须综合证据，不要把摘要逐条复述。',
+    '- 必须吸收 review 中的风险提醒和 mustInclude 项。',
     '- 参考文献部分必须引用下面提供的证据；若存在 url，则用 Markdown 链接。',
     '- 如果主题与 x402/Stacks 无直接学术关系，只能将其简要说明为支付/解锁基础设施，不要喧宾夺主。',
-    '- 不要声称审查了 100+ 篇论文，除非提供的数据里确实有那么多。',
-    '- 如果证据不足，要明确写出证据边界与结论强度。',
-    '- 整体输出篇幅要明显高于普通摘要，尽量像成熟综述而不是产品说明。',
     '',
     'AI Parliament 综合结果：',
     JSON.stringify({
@@ -564,6 +686,12 @@ async function generateAcademicMarkdownReport(topic, researchMode, topicProfile,
       quality: llmResult.quality
     }, null, 2),
     '',
+    '章节计划：',
+    JSON.stringify(plan, null, 2),
+    '',
+    '审稿意见：',
+    JSON.stringify(review, null, 2),
+    '',
     '证据统计：',
     JSON.stringify(evidenceStats, null, 2),
     '',
@@ -571,9 +699,7 @@ async function generateAcademicMarkdownReport(topic, researchMode, topicProfile,
     JSON.stringify(evidenceForPrompt, null, 2),
     '',
     '参考文献元数据：',
-    JSON.stringify(topicCitations, null, 2),
-    '',
-    '特别提醒：请像系统性综述写作者一样组织报告，既要写“看到了什么”，也要写“意味着什么”“还缺什么”“下一步怎么做”。'
+    JSON.stringify(topicCitations, null, 2)
   ].join('\n');
 
   try {

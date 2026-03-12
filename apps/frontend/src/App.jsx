@@ -13,45 +13,31 @@ const TOPIC_PRESETS = [
 ];
 
 const JUDGE_CRITERIA = [
-  { key: 'innovation', title: 'Innovation', description: 'Treats HTTP 402 as a machine-readable capability unlock for molbots, not a web-only payment primitive.' },
-  { key: 'technical', title: 'Technical depth', description: 'Combines retrieval, multi-agent synthesis, capability pricing, entitlement release, and settlement semantics.' },
-  { key: 'stacks', title: 'Stacks alignment', description: 'Positions STX, sBTC, USDCx, and Clarity invoice state as first-class rails in the protocol story.' },
-  { key: 'ux', title: 'User experience', description: 'Humans see a clean dossier flow; molbots can still interpret pricing, unlock, and delivery semantics.' },
-  { key: 'impact', title: 'Impact potential', description: 'Extends from one research product into a wider machine-to-machine commerce network.' }
+  { key: 'innovation', title: 'Innovation', description: 'Treats x402 as a machine-readable capability unlock for molbots rather than a web-only paywall.' },
+  { key: 'technical', title: 'Technical depth', description: 'Shows pricing, settlement, invoice state, entitlement release, and multi-agent orchestration as one protocol.' },
+  { key: 'stacks', title: 'Stacks alignment', description: 'Centers STX, sBTC, USDCx, and Clarity invoice semantics in the architecture.' },
+  { key: 'ux', title: 'User experience', description: 'Humans see a clean dossier while molbots get explicit protocol semantics.' },
+  { key: 'impact', title: 'Impact potential', description: 'Can expand from paid reports into a wider machine-to-machine service economy.' }
 ];
 
-const ASSET_RAILS = [
-  { asset: 'STX', useCase: 'Low-friction default unlocks', why: 'Best for native Stacks-denominated service access and simple settlement.' },
-  { asset: 'sBTC', useCase: 'High-trust, Bitcoin-aligned premium services', why: 'Strong narrative fit for high-value machine commerce and treasury alignment.' },
-  { asset: 'USDCx', useCase: 'Stable pricing for specialist skills', why: 'Useful when molbots charge predictable prices for content, audits, or data services.' }
-];
+const CHALLENGE_FIELDS = ['service', 'price', 'asset', 'recipient', 'capability', 'expiry', 'invoiceId'];
+const INVOICE_FIELDS = ['invoiceId', 'payer', 'recipient', 'asset', 'amount', 'status', 'createdAt', 'consumedAt'];
+const ENTITLEMENT_FIELDS = ['capability', 'scope', 'downloadRights', 'delegationRights', 'replayPolicy', 'proofOfPayment'];
 
-const NETWORK_NODES = [
-  { title: 'Manager Molbot', type: 'Coordinator', detail: 'Decomposes demand, routes tasks, assembles paid outputs.' },
-  { title: 'Security Analyst', type: 'Specialist', detail: 'Charges for exploit triage, audit synthesis, premium research.' },
-  { title: 'Shopping Molbot', type: 'Executor', detail: 'Can shop, procure tools, or perform budgeted agent tasks.' },
-  { title: 'Content Forge', type: 'Specialist', detail: 'Sells premium content and structured long-form artifacts.' },
-  { title: 'x402 Challenge', type: 'Protocol', detail: 'Encodes price, asset, capability, recipient, and unlock terms.' },
-  { title: 'Clarity Invoice State', type: 'Settlement', detail: 'Tracks created → paid → consumed lifecycle on Stacks-style semantics.' }
-];
-
-const ENTITLEMENTS = [
-  'premium-report',
-  'delegated-skill-call',
-  'downloadable-artifact',
-  'specialist-transcript',
-  'automation-rights'
+const NEGOTIATION_FLOW = [
+  'Requester molbot discovers a specialist service.',
+  'Specialist returns x402 challenge + capability terms.',
+  'Requester chooses STX / sBTC / USDCx settlement rail.',
+  'Clarity invoice moves from created to paid.',
+  'Capability entitlement is released to the buyer.',
+  'If redeemed, invoice moves to consumed to prevent replay.'
 ];
 
 async function request(path, options = {}) {
   const response = await fetch(`${API_BASE}${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options.headers || {})
-    },
+    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
     ...options
   });
-
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || 'Request failed');
   return data;
@@ -72,6 +58,18 @@ function JudgeCard({ title, description }) {
 
 function AlignmentRow({ label, value, strong = false }) {
   return <div className="alignmentRow"><span>{label}</span><strong className={strong ? 'is-strong' : ''}>{value}</strong></div>;
+}
+
+function SpecCard({ title, kicker, fields, accent }) {
+  return (
+    <article className={`specCard miniPanel ${accent ? 'specCardAccent' : ''}`}>
+      <p className="panelKicker">{kicker}</p>
+      <h3>{title}</h3>
+      <div className="specFields">
+        {fields.map((field) => <span key={field} className="specField">{field}</span>)}
+      </div>
+    </article>
+  );
 }
 
 export default function App() {
@@ -150,6 +148,12 @@ export default function App() {
     return 'in-progress';
   }, [job]);
 
+  const reportMeta = useMemo(() => ({
+    synthesisMode: job?.report?.quality?.synthesisMode || job?.llm?.mode || 'unknown',
+    confidence: job?.report?.quality?.confidence || 'unknown',
+    contractState: job?.contractState?.invoiceStatus || 'created'
+  }), [job]);
+
   return (
     <div className="page">
       <div className="pageGlow pageGlowA" aria-hidden="true" />
@@ -159,8 +163,8 @@ export default function App() {
         <div className="brandLockup">
           <span className="brandMark" aria-hidden="true">◈</span>
           <div>
-            <p className="brandName">AutoScholar V8.2</p>
-            <p className="brandSub">Protocol architecture for molbot-to-molbot commerce</p>
+            <p className="brandName">AutoScholar V8.3</p>
+            <p className="brandSub">Protocol spec + planner-reviewed research synthesis</p>
           </div>
         </div>
         <div className="topbarMeta">
@@ -173,16 +177,16 @@ export default function App() {
         <div className="heroMain stack-lg">
           <div className="heroHead stack-sm">
             <span className="eyebrow">Agentic commerce on Stacks</span>
-            <h1>A protocol where molbots discover, price, settle, and release skills.</h1>
+            <h1>A protocol spec for molbots that pay, get paid, and unlock capabilities.</h1>
             <p className="heroText">
-              V8.2 pushes beyond UI storytelling into protocol architecture: manager molbots route tasks to specialists,
-              x402 carries machine-readable pricing and entitlement terms, and Stacks-flavored settlement semantics anchor created → paid → consumed delivery.
+              V8.3 moves from protocol storytelling to protocol specification. It shows how x402 challenge payloads, Clarity invoice state,
+              capability entitlements, and planner-reviewed report generation can work together as a real molbot commerce rail.
             </p>
           </div>
           <div className="statsGrid" aria-label="Current summary stats">
             <StatTile label="Research mode" value={summaryStats.mode} tone="accent" />
             <StatTile label="Topic evidence" value={String(summaryStats.papers)} />
-            <StatTile label="Payment evidence" value={String(summaryStats.paymentEvidence)} />
+            <StatTile label="Synthesis mode" value={reportMeta.synthesisMode} />
             <StatTile label="Judge readiness" value={judgeReadiness} tone="warn" />
           </div>
         </div>
@@ -202,54 +206,29 @@ export default function App() {
 
       <section className="judgeBoard panel">
         <div className="sectionHeader sectionHeader-start judgeBoardHeader">
-          <div><p className="panelKicker">Judge-facing framing</p><h2>How V8.2 maps to the hackathon scorecard</h2></div>
-          <p className="helperText judgeBoardHint">This version is optimized to show protocol thinking, asset rails, and high-quality report output together.</p>
+          <div><p className="panelKicker">Judge-facing framing</p><h2>How V8.3 maps to the hackathon scorecard</h2></div>
+          <p className="helperText judgeBoardHint">This version makes the protocol semantics and the report-generation rigor more legible.</p>
         </div>
         <div className="judgeGrid">{JUDGE_CRITERIA.map((item) => <JudgeCard key={item.key} title={item.title} description={item.description} />)}</div>
       </section>
 
-      <section className="architectureBoard panel">
+      <section className="specBoard panel">
         <div className="sectionHeader sectionHeader-start judgeBoardHeader">
-          <div><p className="panelKicker">Protocol architecture</p><h2>Molbot network, asset rails, and capability entitlements</h2></div>
-          <p className="helperText judgeBoardHint">The goal is to make the protocol legible: who pays whom, for what, on which rail, and what gets unlocked.</p>
+          <div><p className="panelKicker">Protocol specification</p><h2>x402 challenge schema, invoice schema, and entitlement schema</h2></div>
+          <p className="helperText judgeBoardHint">The point is to show protocol-level thinking, not only product mockups.</p>
         </div>
 
-        <div className="architectureGrid">
-          <div className="panelInset networkPanel">
-            <p className="panelKicker">Network topology</p>
-            <div className="nodeGrid">
-              {NETWORK_NODES.map((node) => (
-                <article key={node.title} className="nodeCard">
-                  <span className="nodeType">{node.type}</span>
-                  <h3>{node.title}</h3>
-                  <p>{node.detail}</p>
-                </article>
-              ))}
-            </div>
-          </div>
+        <div className="specGrid">
+          <SpecCard title="x402 challenge schema" kicker="Pricing envelope" fields={CHALLENGE_FIELDS} accent />
+          <SpecCard title="Invoice state schema" kicker="Clarity lifecycle" fields={INVOICE_FIELDS} />
+          <SpecCard title="Capability entitlement schema" kicker="Post-payment rights" fields={ENTITLEMENT_FIELDS} />
+        </div>
 
-          <div className="panelInset railsPanel">
-            <p className="panelKicker">Asset strategy</p>
-            <div className="railsList">
-              {ASSET_RAILS.map((rail) => (
-                <div key={rail.asset} className="railRow">
-                  <strong>{rail.asset}</strong>
-                  <div>
-                    <p>{rail.useCase}</p>
-                    <span>{rail.why}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="panelInset entitlementsPanel">
-            <p className="panelKicker">Capability entitlements</p>
-            <div className="entitlementChips">
-              {ENTITLEMENTS.map((item) => <span key={item} className="entitlementChip">{item}</span>)}
-            </div>
-            <p className="entitlementCopy">x402 is presented here as a machine-readable entitlement layer: after payment, the buyer molbot receives explicit rights to premium outputs, delegated calls, or downloadable artifacts.</p>
-          </div>
+        <div className="sequencePanel panelInset">
+          <p className="panelKicker">Negotiation + settlement sequence</p>
+          <ol className="sequenceList">
+            {NEGOTIATION_FLOW.map((step) => <li key={step}>{step}</li>)}
+          </ol>
         </div>
       </section>
 
@@ -279,21 +258,21 @@ export default function App() {
 
           <div className="subgrid">
             <article className="miniPanel infoPanel">
-              <p className="panelKicker">Visible to user</p>
+              <p className="panelKicker">Planner-reviewed report path</p>
               <ul className="list compact">
-                <li>Topic metadata and workflow status</li>
-                <li>x402 payment checkpoint</li>
-                <li>Unlocked markdown dossier</li>
-                <li>References and supporting evidence</li>
+                <li>Outline planner defines section goals before long-form writing</li>
+                <li>Reviewer checks evidence strength, overclaims, and missing sections</li>
+                <li>Final writer produces markdown dossier using the reviewed plan</li>
+                <li>Fallback still returns structured literature-style output</li>
               </ul>
             </article>
             <article className="miniPanel infoPanel">
-              <p className="panelKicker">Report quality upgrades</p>
+              <p className="panelKicker">Why judges should care</p>
               <ul className="list compact">
-                <li>Stronger report synthesis prompt inspired by structured literature-review systems</li>
-                <li>Explicit core-literature analysis, not only a short summary</li>
-                <li>More emphasis on evidence strength, gaps, and implementation guidance</li>
-                <li>Better fallback markdown when full synthesis is unavailable</li>
+                <li>Protocol semantics are explicit enough for future wallet and molbot integration.</li>
+                <li>Report quality now depends on process rigor, not one lucky generation.</li>
+                <li>Capability unlock semantics are visible and composable.</li>
+                <li>The same rail can support research, shopping, and specialist skill commerce.</li>
               </ul>
             </article>
           </div>
@@ -313,14 +292,20 @@ export default function App() {
               <AlignmentRow label="Clarity contract" value={stacksSummary.contract} />
             </div>
             <div className="miniPanel lifecyclePanel">
-              <p className="panelKicker">Clarity invoice lifecycle</p>
+              <p className="panelKicker">Invoice lifecycle</p>
               <div className="lifecycleTrack">
                 <span className="lifecycleStep is-active">created</span>
                 <span className="lifecycleArrow">→</span>
                 <span className={`lifecycleStep ${job?.paymentReceipt ? 'is-active' : ''}`}>paid</span>
                 <span className="lifecycleArrow">→</span>
-                <span className={`lifecycleStep ${job?.paymentReceipt?.invoiceStatus === 'consumed' ? 'is-active' : ''}`}>consumed</span>
+                <span className={`lifecycleStep ${reportMeta.contractState === 'consumed' ? 'is-active' : ''}`}>consumed</span>
               </div>
+            </div>
+            <div className="miniPanel">
+              <p className="panelKicker">Report QA meta</p>
+              <AlignmentRow label="Synthesis mode" value={reportMeta.synthesisMode} />
+              <AlignmentRow label="Confidence" value={reportMeta.confidence} />
+              <AlignmentRow label="Payment evidence" value={String(summaryStats.paymentEvidence)} />
             </div>
           </div>
         </aside>
@@ -353,7 +338,7 @@ export default function App() {
 
               {hasReport ? (
                 <article className="reportBody panelInset stack-lg">
-                  <div className="reportLead"><div><p className="panelKicker">Unlocked markdown</p><p className="reportTopic">{job.topic}</p></div><div className="reportHint">Structured dossier with stronger literature-style synthesis</div></div>
+                  <div className="reportLead"><div><p className="panelKicker">Unlocked markdown</p><p className="reportTopic">{job.topic}</p></div><div className="reportHint">Planner → reviewer → final writer dossier path</div></div>
                   {reportMarkdown ? <div className="markdownReport"><ReactMarkdown remarkPlugins={[remarkGfm]}>{reportMarkdown}</ReactMarkdown></div> : <p className="muted">The report content is not available yet.</p>}
                 </article>
               ) : (

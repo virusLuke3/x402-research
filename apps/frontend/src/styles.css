@@ -961,3 +961,80 @@ textarea:focus {
     grid-template-columns: 1fr;
   }
 }
+
+
+.specBoard {
+  padding: 22px;
+  margin-bottom: 18px;
+}
+
+.specGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.specCard {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 200px;
+}
+
+.specCard h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.specCardAccent {
+  border-color: rgba(87,255,226,0.24);
+}
+
+.specFields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.specField {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0.35rem 0.68rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,0.03);
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.sequencePanel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sequenceList {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  line-height: 1.75;
+  color: var(--text-dim);
+}
+
+@media (max-width: 1240px) {
+  .specGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .specBoard {
+    padding: 16px;
+  }
+}
