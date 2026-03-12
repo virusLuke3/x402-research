@@ -1,12 +1,13 @@
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { spawn } from 'child_process';
 import express from 'express';
 import cors from 'cors';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
+dotenv.config({ path: path.resolve(__dirname, '../../../.env'), override: true });
 
 const app = express();
 const PORT = process.env.PORT || 8787;
@@ -102,7 +103,6 @@ async function generateLLMSummary(topic, papers) {
     return buildLocalFallbackSummary(topic, papers, 'OpenAI-compatible key not configured');
   }
 
-  const apiUrl = `${OPENAI_BASE_URL.replace(/\/$/, '')}/chat/completions`;
   const prompt = [
     `Produce a concise research summary for topic: ${topic}.`,
     `Based on these arXiv papers: ${JSON.stringify(papers.slice(0, 5))}.`,
@@ -113,14 +113,33 @@ async function generateLLMSummary(topic, papers) {
   ].join(' ');
 
   try {
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${OPENAI_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: OPENAI_MODEL,
+    const rawText = await new Promise((resolve, reject) => {
+      const child = spawn('python3', [path.resolve(__dirname, './llm_tuzi.py')], {
+        env: process.env,
+        stdio: ['pipe', 'pipe', 'pipe']
+      });
+
+      let stdout = '';
+      let stderr = '';
+
+      child.stdout.on('data', (chunk) => {
+        stdout += chunk.toString();
+      });
+
+      child.stderr.on('data', (chunk) => {
+        stderr += chunk.toString();
+      });
+
+      child.on('error', reject);
+      child.on('close', (code) => {
+        if (code !== 0) {
+          reject(new Error(stdout || stderr || `python exited with code ${code}`));
+          return;
+        }
+        resolve(stdout);
+      });
+
+      child.stdin.write(JSON.stringify({
         messages: [
           {
             role: 'user',
@@ -128,17 +147,9 @@ async function generateLLMSummary(topic, papers) {
           }
         ],
         temperature: 0
-      })
+      }));
+      child.stdin.end();
     });
-
-    const rawText = await response.text();
-
-    if (!response.ok) {
-      return {
-        ...buildLocalFallbackSummary(topic, papers, `LLM request failed with status ${response.status}`),
-        error: `LLM request failed with status ${response.status}: ${rawText}`
-      };
-    }
 
     let parsed;
     try {
@@ -150,15 +161,32 @@ async function generateLLMSummary(topic, papers) {
       };
     }
 
-    const content = parsed?.choices?.[0]?.message?.content ?? parsed?.choices?.[0]?.text ?? '';
+    if (parsed?.code !== undefined) {
+      if (parsed.code !== 0) {
+        return {
+          ...buildLocalFallbackSummary(topic, papers, 'LLM provider returned an error'),
+          error: parsed.message || JSON.stringify(parsed)
+        };
+      }
+      parsed = parsed.data || {};
+    }
+
+    if (parsed?.http_status || parsed?.error) {
+      return {
+        ...buildLocalFallbackSummary(topic, papers, 'LLM provider returned an error'),
+        error: parsed.error || `HTTP ${parsed.http_status}`
+      };
+    }
+
+    const content = parsed?.choices?.[0]?.message?.content ?? parsed?.choices?.[0]?.content ?? parsed?.choices?.[0]?.text ?? '';
     const result = parseJSONContent(content);
 
     if (result) {
-      return { mode: 'llm-fetch', ...result };
+      return { mode: 'llm-python', ...result };
     }
 
     return {
-      mode: 'llm-fetch',
+      mode: 'llm-python',
       summary: typeof content === 'string' && content.trim() ? content : `Generated summary for ${topic}.`,
       keyFindings: [],
       implications: []

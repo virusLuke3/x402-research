@@ -41,7 +41,7 @@ npm install
 Copy `.env.example` to `.env` and fill in values.
 
 Current local setup uses:
-- OpenAI-compatible base URL from Right Codes
+- TuZi OpenAI-compatible API at `https://api.tu-zi.com/v1`
 - model `gpt-5.4`
 - paper source `arXiv`
 - simulated chain payment
@@ -72,6 +72,10 @@ VITE_API_BASE=http://localhost:8790 npm --workspace apps/frontend run dev
 6. The backend simulates payment verification, calls the summarizer model, and returns a completed report.
 7. If the provider credentials are invalid, the backend now returns a fallback report instead of failing the whole demo flow.
 
+Implementation note:
+- The backend loads `.env` with `override: true` so stale shell-level keys do not shadow the intended TuZi credentials.
+- The TuZi LLM call is executed through `apps/backend/src/llm_tuzi.py`, which matches the verified Python request path for this environment.
+
 ## Configuration
 
 Environment variables:
@@ -82,6 +86,11 @@ Environment variables:
 - `OPENAI_API_KEY`
 - `OPENAI_BASE_URL`
 - `OPENAI_MODEL`
+
+Recommended local dev pairing for this repo:
+- `OPENAI_BASE_URL=https://api.tu-zi.com/v1`
+- `OPENAI_MODEL=gpt-5.4`
+- `OPENAI_API_KEY=<your TuZi API key>`
 
 ## Current Status
 

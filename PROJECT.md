@@ -41,3 +41,4 @@ Pending.
 2. add one real specialist endpoint
 3. add submission-facing screenshots and demo script
 4. validate provider credentials before demo so fallback mode is only a safety net
+5. keep TuZi auth isolated from stale shell env overrides during local runs

@@ -1,66 +1,46 @@
-#!/usr/bin/env python3
 import json
 import os
 import sys
-import urllib.request
-import urllib.error
-import ssl
-
-def request_with_env(url: str, payload: dict, api_key: str):
-    data = json.dumps(payload).encode('utf-8')
-    req = urllib.request.Request(
-        url,
-        data=data,
-        headers={
-            'Content-Type': 'application/json',
-            'Authorization': f'Bearer {api_key}',
-        },
-        method='POST',
-    )
-    ctx = ssl.create_default_context()
-    with urllib.request.urlopen(req, timeout=120, context=ctx) as resp:
-        return resp.read().decode('utf-8')
+from urllib import request, error
 
 
 def main():
-    raw = sys.stdin.read()
-    body = json.loads(raw)
-    api_url = body['api_url']
-    api_key = body['api_key']
-    model = body['model']
-    topic = body['topic']
-    papers = body['papers']
+    payload = json.load(sys.stdin)
+    api_key = os.environ.get('OPENAI_API_KEY', '')
+    base_url = os.environ.get('OPENAI_BASE_URL', 'https://api.tu-zi.com/v1').rstrip('/')
+    model = os.environ.get('OPENAI_MODEL', 'gpt-5.4')
 
-    payload = {
-        'model': model,
-        'messages': [
-            {
-                'role': 'user',
-                'content': f'Produce a concise research summary for topic: {topic}. Based on these arXiv papers: {json.dumps(papers[:5])}. Return JSON only with keys summary, keyFindings, implications.'
-            }
-        ],
-        'temperature': 0,
+    if not api_key:
+        print(json.dumps({"error": "OPENAI_API_KEY is missing"}, ensure_ascii=False))
+        sys.exit(1)
+
+    body = {
+        "model": model,
+        "messages": payload["messages"],
+        "temperature": payload.get("temperature", 0),
+        "stream": False,
     }
 
+    req = request.Request(
+        f"{base_url}/chat/completions",
+        data=json.dumps(body).encode("utf-8"),
+        method="POST",
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+        },
+    )
+
     try:
-        text = request_with_env(api_url, payload, api_key)
-        parsed = json.loads(text)
-        content = parsed['choices'][0]['message']['content']
-        try:
-            result = json.loads(content)
-        except Exception:
-            result = {
-                'summary': content,
-                'keyFindings': [],
-                'implications': []
-            }
-        print(json.dumps({'ok': True, 'result': result, 'raw': parsed}, ensure_ascii=False))
-    except urllib.error.HTTPError as e:
-        err = e.read().decode('utf-8', 'ignore')
-        print(json.dumps({'ok': False, 'error': f'HTTP {e.code}: {err}'}, ensure_ascii=False))
+        with request.urlopen(req, timeout=180) as resp:
+            raw = resp.read().decode("utf-8")
+            print(raw)
+    except error.HTTPError as exc:
+        raw = exc.read().decode("utf-8", errors="ignore")
+        print(json.dumps({"http_status": exc.code, "error": raw}, ensure_ascii=False))
         sys.exit(1)
-    except Exception as e:
-        print(json.dumps({'ok': False, 'error': str(e)}, ensure_ascii=False))
+    except Exception as exc:
+        print(json.dumps({"error": str(exc)}, ensure_ascii=False))
         sys.exit(1)
 
 
