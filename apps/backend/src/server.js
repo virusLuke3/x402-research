@@ -188,11 +188,19 @@ function cleanTopicForSearch(topic) {
 
 function extractQuery(topic, researchMode, topicProfile) {
   const cleaned = cleanTopicForSearch(topic);
+  const englishKeywords = safeArray(cleaned.match(/[a-z0-9-]+/ig), []).join(' ');
+  const containsCjk = /[\u4e00-\u9fff]/.test(cleaned);
+
+  if (containsCjk) {
+    const hintQuery = [topicProfile.retrieverHint, englishKeywords].filter(Boolean).join(' ').trim();
+    return hintQuery || topicProfile.retrieverHint;
+  }
+
   if (topicProfile.key === 'solidity') {
-    return cleaned || topicProfile.retrieverHint;
+    return [cleaned, topicProfile.retrieverHint].filter(Boolean).join(' ').trim();
   }
   if (researchMode === 'forecast') {
-    return cleaned || topicProfile.retrieverHint;
+    return [cleaned, topicProfile.retrieverHint].filter(Boolean).join(' ').trim();
   }
   return cleaned || topicProfile.retrieverHint;
 }
@@ -358,6 +366,194 @@ function buildPaymentFlow() {
   ];
 }
 
+function buildCitationUrl(item) {
+  const id = String(item?.id || '').trim();
+  if (/^https?:\/\//i.test(id)) {
+    return id.replace(/^http:\/\//i, 'https://');
+  }
+  return null;
+}
+
+function buildCitationRecords(items, prefix = '') {
+  return items.map((paper, index) => ({
+    ref: `[${prefix}${index + 1}]`,
+    title: paper.title,
+    authors: paper.authors,
+    published: formatDate(paper.published),
+    sourceType: paper.sourceType,
+    evidenceClass: paper.evidenceClass,
+    id: paper.id,
+    url: buildCitationUrl(paper),
+    summary: truncate(paper.summary, 320)
+  }));
+}
+
+function buildMarkdownReferenceLine(citation, index) {
+  const authorText = safeArray(citation.authors, []).join(', ') || 'Unknown authors';
+  const tail = [authorText, citation.published, citation.sourceType].filter(Boolean).join(' · ');
+  if (citation.url) {
+    return `${index + 1}. ${citation.ref} [${citation.title}](${citation.url})${tail ? ` — ${tail}` : ''}`;
+  }
+  return `${index + 1}. ${citation.ref} ${citation.title}${tail ? ` — ${tail}` : ''}。无公开链接。`;
+}
+
+function buildFallbackMarkdownReport(topic, researchMode, topicProfile, evidenceBundle, llmResult, topicCitations) {
+  const title = `# AutoScholar ${researchMode === 'forecast' ? '预测研究报告' : '研究报告'}：${topic}`;
+  const evidenceRows = safeArray(evidenceBundle.topicEvidence, []).map((paper, index) => {
+    const citation = topicCitations[index];
+    const prefix = citation?.url ? `- **[${paper.title}](${citation.url})**` : `- **${paper.title}**`;
+    const meta = [formatDate(paper.published), safeArray(paper.authors, []).join(', '), paper.sourceType].filter(Boolean).join(' · ');
+    return `${prefix}${meta ? ` — ${meta}` : ''}\n  - ${truncate(paper.summary, 420)}`;
+  });
+  const sections = [
+    title,
+    '',
+    '## 1. 执行摘要',
+    llmResult.executiveSummary || `围绕“${topic}”的当前证据已完成初步综合。`,
+    '',
+    '## 2. 研究范围与方法',
+    llmResult.methodology || `基于 ${topicProfile.label} 的主题证据检索、筛选和综合分析。`,
+    '',
+    '## 3. 核心发现',
+    ...safeArray(llmResult.keyFindings, []).map((item) => `- ${item}`),
+    '',
+    '## 4. 综合分析',
+    llmResult.consensus || '当前证据已支持形成初步综合判断，但仍需结合更多高质量外部论文继续扩展。',
+    ''
+  ];
+
+  if (llmResult.domainSections?.vulnerabilityTaxonomy?.length) {
+    sections.push('## 5. 漏洞类别与缓解模式');
+    sections.push('### 5.1 漏洞类别');
+    sections.push(...safeArray(llmResult.domainSections.vulnerabilityTaxonomy, []).map((item) => `- ${item}`));
+    sections.push('');
+    if (safeArray(llmResult.domainSections.mitigationPatterns, []).length) {
+      sections.push('### 5.2 缓解模式');
+      sections.push(...safeArray(llmResult.domainSections.mitigationPatterns, []).map((item) => `- ${item}`));
+      sections.push('');
+    }
+  }
+
+  if (safeArray(llmResult.scenarios, []).length) {
+    sections.push('## 5. 情景分析');
+    sections.push(...safeArray(llmResult.scenarios, []).map((item) => `- **${item.name}**（${item.probability}）：${item.outlook} 驱动因素：${item.driver}`));
+    sections.push('');
+  }
+
+  if (safeArray(llmResult.timeline, []).length) {
+    sections.push('## 6. 时间线判断');
+    sections.push(...safeArray(llmResult.timeline, []).map((item) => `- **${item.window}**：${item.expectation}`));
+    sections.push('');
+  }
+
+  if (safeArray(llmResult.implications, []).length) {
+    sections.push('## 7. 启示与建议');
+    sections.push(...safeArray(llmResult.implications, []).map((item) => `- ${item}`));
+    sections.push('');
+  }
+
+  if (evidenceRows.length) {
+    sections.push('## 8. 证据综述');
+    sections.push(...evidenceRows);
+    sections.push('');
+  }
+
+  if (safeArray(llmResult.limitations, []).length) {
+    sections.push('## 9. 局限性');
+    sections.push(...safeArray(llmResult.limitations, []).map((item) => `- ${item}`));
+    sections.push('');
+  }
+
+  if (safeArray(llmResult.nextResearchActions, []).length) {
+    sections.push('## 10. 后续研究方向');
+    sections.push(...safeArray(llmResult.nextResearchActions, []).map((item) => `- ${item}`));
+    sections.push('');
+  }
+
+  sections.push('## 11. 参考文献');
+  if (topicCitations.length) {
+    sections.push(...topicCitations.map((citation, index) => buildMarkdownReferenceLine(citation, index)));
+  } else {
+    sections.push('当前没有可公开跳转的外部参考文献链接。');
+  }
+
+  return sections.join('\n');
+}
+
+async function generateAcademicMarkdownReport(topic, researchMode, topicProfile, evidenceBundle, llmResult, topicCitations) {
+  if (!OPENAI_API_KEY) {
+    return buildFallbackMarkdownReport(topic, researchMode, topicProfile, evidenceBundle, llmResult, topicCitations);
+  }
+
+  const evidenceForPrompt = evidenceBundle.topicEvidence.map((paper, index) => ({
+    rank: index + 1,
+    title: paper.title,
+    authors: paper.authors,
+    published: formatDate(paper.published),
+    sourceType: paper.sourceType,
+    evidenceClass: paper.evidenceClass,
+    url: buildCitationUrl(paper),
+    abstract: truncate(paper.summary, 900)
+  }));
+
+  const systemPrompt = [
+    '你是一位资深学术文献综述撰写专家。',
+    '你的任务是把研究证据和 AI 评审结论整合为一篇成熟、完整、可直接阅读的 Markdown 研究报告。',
+    '写作风格参考 Full-Workflow Multi-Agent Literature Review 的报告阶段：先审查，再综合，最后输出结构化长文。',
+    '必须使用严谨中文，避免空话，避免营销语，避免虚构未提供的论文数量、实验结果或引用。',
+    '直接输出 Markdown，不要输出 JSON，不要输出代码块包裹的 Markdown。'
+  ].join(' ');
+
+  const userPrompt = [
+    `研究主题：${topic}`,
+    `研究模式：${researchMode}`,
+    `主题领域：${topicProfile.label}`,
+    '',
+    '写作要求：',
+    '- 输出一份成熟的学术风格研究报告，而不是短摘要。',
+    '- 报告必须包含清晰标题层级，至少包含：执行摘要、核心文献解析、技术综述/现状分析、综合判断或实施建议、风险与局限、参考文献。',
+    '- 参考文献部分必须引用下面提供的证据；若存在 url，则用 Markdown 链接。',
+    '- 不要讨论前端、系统配置、x402 支付流程细节；除非必要，只需一句话说明这是报告解锁机制而非研究主题。',
+    '- 不要声称审查了 100+ 篇论文，除非提供的数据里确实有那么多。',
+    '- 如果证据不足，要明确指出证据边界和结论强度。',
+    '',
+    'AI Parliament 综合结果：',
+    JSON.stringify({
+      executiveSummary: llmResult.executiveSummary,
+      methodology: llmResult.methodology,
+      keyFindings: llmResult.keyFindings,
+      implications: llmResult.implications,
+      limitations: llmResult.limitations,
+      noveltyAssessment: llmResult.noveltyAssessment,
+      consensus: llmResult.consensus,
+      nextResearchActions: llmResult.nextResearchActions,
+      scenarios: llmResult.scenarios,
+      timeline: llmResult.timeline,
+      domainSections: llmResult.domainSections
+    }, null, 2),
+    '',
+    '可用主题证据：',
+    JSON.stringify(evidenceForPrompt, null, 2),
+    '',
+    '参考文献元数据：',
+    JSON.stringify(topicCitations, null, 2)
+  ].join('\n');
+
+  try {
+    const content = await callLLM([
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt }
+    ], 0.2);
+
+    if (typeof content === 'string' && content.trim()) {
+      return content.trim();
+    }
+  } catch {
+  }
+
+  return buildFallbackMarkdownReport(topic, researchMode, topicProfile, evidenceBundle, llmResult, topicCitations);
+}
+
 function buildAgentIdentity(roleSpec, topicProfile) {
   return {
     agent: roleSpec.agent,
@@ -376,10 +572,28 @@ async function callLLM(messages, temperature = 0.1) {
     });
     let stdout = '';
     let stderr = '';
+    let settled = false;
+    const timeoutMs = Number(process.env.LLM_TIMEOUT_MS || 20000);
+
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      child.kill('SIGTERM');
+      reject(new Error(`llm timeout after ${timeoutMs}ms`));
+    }, timeoutMs);
+
     child.stdout.on('data', (chunk) => { stdout += chunk.toString(); });
     child.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
-    child.on('error', reject);
+    child.on('error', (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      reject(error);
+    });
     child.on('close', (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
       if (code !== 0) {
         reject(new Error(stdout || stderr || `python exited with code ${code}`));
         return;
@@ -640,19 +854,35 @@ async function runAIParliament(topic, researchMode, topicProfile, evidenceBundle
 
 async function generateReport(topic, researchMode, topicProfile, evidenceBundle) {
   if (!OPENAI_API_KEY) {
-    return buildFallbackReport(topic, researchMode, topicProfile, evidenceBundle);
+    const fallback = buildFallbackReport(topic, researchMode, topicProfile, evidenceBundle);
+    const citations = buildCitationRecords(evidenceBundle.topicEvidence);
+    return {
+      ...fallback,
+      markdown: buildFallbackMarkdownReport(topic, researchMode, topicProfile, evidenceBundle, fallback, citations)
+    };
   }
   try {
-    return await runAIParliament(topic, researchMode, topicProfile, evidenceBundle);
-  } catch (error) {
+    const llmResult = await runAIParliament(topic, researchMode, topicProfile, evidenceBundle);
+    const citations = buildCitationRecords(evidenceBundle.topicEvidence);
     return {
-      ...buildFallbackReport(topic, researchMode, topicProfile, evidenceBundle),
+      ...llmResult,
+      markdown: await generateAcademicMarkdownReport(topic, researchMode, topicProfile, evidenceBundle, llmResult, citations)
+    };
+  } catch (error) {
+    const fallback = buildFallbackReport(topic, researchMode, topicProfile, evidenceBundle);
+    const citations = buildCitationRecords(evidenceBundle.topicEvidence);
+    return {
+      ...fallback,
+      markdown: buildFallbackMarkdownReport(topic, researchMode, topicProfile, evidenceBundle, fallback, citations),
       error: error.message || 'unknown llm error'
     };
   }
 }
 
 function buildResearchReport(topic, researchMode, topicProfile, evidenceBundle, llmResult, extractedAssets, contractState = null) {
+  const citations = buildCitationRecords(evidenceBundle.topicEvidence);
+  const paymentCitations = buildCitationRecords(evidenceBundle.paymentEvidence, 'P');
+
   return {
     title: `AutoScholar ${researchMode === 'forecast' ? 'forecast dossier' : 'research dossier'}: ${topic}`,
     researchMode,
@@ -685,23 +915,9 @@ function buildResearchReport(topic, researchMode, topicProfile, evidenceBundle, 
     },
     paymentFlow: buildPaymentFlow(),
     extractedAssets,
-    citations: evidenceBundle.topicEvidence.map((paper, index) => ({
-      ref: `[${index + 1}]`,
-      title: paper.title,
-      authors: paper.authors,
-      published: formatDate(paper.published),
-      sourceType: paper.sourceType,
-      evidenceClass: paper.evidenceClass,
-      id: paper.id
-    })),
-    paymentCitations: evidenceBundle.paymentEvidence.map((paper, index) => ({
-      ref: `[P${index + 1}]`,
-      title: paper.title,
-      authors: paper.authors,
-      sourceType: paper.sourceType,
-      evidenceClass: paper.evidenceClass,
-      id: paper.id
-    }))
+    citations,
+    paymentCitations,
+    markdown: llmResult.markdown || buildFallbackMarkdownReport(topic, researchMode, topicProfile, evidenceBundle, llmResult, citations)
   };
 }
 
