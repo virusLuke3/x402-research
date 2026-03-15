@@ -1,18 +1,25 @@
-import dotenv from 'dotenv';
+import './env.js';
+import { spawn } from 'child_process';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { spawn } from 'child_process';
-import fs from 'fs';
 import express from 'express';
 import cors from 'cors';
-import { buildStacksPaymentRequest, verifyStacksPayment, STACKS_NETWORK, STACKS_API_BASE } from './stacks.js';
+import {
+  ALLOW_DEMO_PAYMENTS,
+  buildStacksPaymentRequest,
+  getStacksPaymentReadiness,
+  isPaymentRequestExpired,
+  verifyStacksPayment,
+  STACKS_NETWORK,
+  STACKS_API_BASE,
+} from './stacks.js';
 import { buildX402Challenge, buildX402Headers } from './x402.js';
 import { buildClarityPaymentSpec, buildClarityVerificationPlan } from './clarity-payment.js';
 import { readContractInvoiceState, seedContractInvoiceState, markContractInvoicePaid, markContractInvoiceConsumed } from './contract-state.js';
+import { createRequestId, getLogPath, logError, logInfo, logWarn } from './logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-dotenv.config({ path: path.resolve(__dirname, '../../../.env'), override: true });
 
 const app = express();
 const PORT = process.env.PORT || 8787;
@@ -20,14 +27,50 @@ const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || 'http://localhost:5173';
 const DEMO_PAYMENT_TOKEN = process.env.DEMO_PAYMENT_TOKEN || 'demo-paid-token';
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
+const OPENAI_API_STYLE = (process.env.OPENAI_API_STYLE || 'chat-completions').trim().toLowerCase();
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-5.4';
-const KB_PATH = path.resolve(__dirname, '../../../docs/x402-stacks-knowledge-base.json');
+const RESEARCH_PYTHON_BIN = process.env.RESEARCH_PYTHON_BIN || process.env.PYTHON_BIN || 'python3';
+const PAYMENT_AMOUNT = process.env.STACKS_PAYMENT_AMOUNT || '500000';
 
 app.use(cors({ origin: FRONTEND_ORIGIN }));
 app.use(express.json());
+app.use((req, res, next) => {
+  const requestId = createRequestId();
+  const startedAt = Date.now();
+  req.requestId = requestId;
+  res.setHeader('x-request-id', requestId);
+  logInfo('http.request.start', {
+    requestId,
+    method: req.method,
+    path: req.path,
+    ip: req.ip,
+  });
+  res.on('finish', () => {
+    logInfo('http.request.finish', {
+      requestId,
+      method: req.method,
+      path: req.path,
+      statusCode: res.statusCode,
+      durationMs: Date.now() - startedAt,
+    });
+  });
+  next();
+});
+
+app.get('/api/payment/readiness', async (_req, res) => {
+  try {
+    const readiness = await getStacksPaymentReadiness();
+    if (!readiness.ok) {
+      logWarn('payment.readiness.warning', readiness);
+    }
+    return res.json(readiness);
+  } catch (error) {
+    logError('payment.readiness.failed', { error });
+    return res.status(500).json({ error: error.message || 'failed to inspect payment readiness' });
+  }
+});
 
 const jobs = new Map();
-const paymentKnowledgeBase = JSON.parse(fs.readFileSync(KB_PATH, 'utf8'));
 
 const PAYMENT_RAIL = {
   challengeStandard: 'x402 / HTTP 402 Payment Required',
@@ -138,6 +181,27 @@ function truncate(text, max = 260) {
   const value = String(text || '').replace(/\s+/g, ' ').trim();
   if (!value) return '';
   return value.length > max ? `${value.slice(0, max)}...` : value;
+}
+
+function validatePaymentAuthorization(authorization, challenge) {
+  if (!authorization || typeof authorization !== 'object') {
+    return { ok: false, reason: 'missing authorization payload' };
+  }
+  const checks = [
+    ['paymentId', challenge.paymentId],
+    ['nonce', challenge.nonce],
+    ['expiresAt', challenge.expiresAt],
+    ['resource', challenge.resource || challenge.unlock?.resource],
+  ];
+  for (const [field, expected] of checks) {
+    if (expected && authorization[field] !== expected) {
+      return { ok: false, reason: `${field} mismatch` };
+    }
+  }
+  if (challenge.maxAmountRequired && String(authorization.amount || '') !== String(challenge.maxAmountRequired)) {
+    return { ok: false, reason: 'amount mismatch' };
+  }
+  return { ok: true };
 }
 
 function deriveResearchMode(topic) {
@@ -269,23 +333,8 @@ function buildTopicFrameworkEvidence(topic, topicProfile) {
   }));
 }
 
-function buildPaymentRailEvidence(topic, topicProfile) {
-  return (paymentKnowledgeBase.entries || []).map((entry, index) => ({
-    id: entry.id,
-    title: entry.title,
-    summary: entry.summary,
-    published: '2026-03-12',
-    authors: ['AutoScholar Payment Rail KB'],
-    keywords: entry.keywords || [],
-    sourceType: entry.sourceType || 'local-kb',
-    category: entry.category || 'protocol-core',
-    relevanceScore: scoreEvidence(topic, entry, index),
-    evidenceClass: classifyEvidence(topicProfile, { ...entry, category: entry.category || 'protocol-core' })
-  }));
-}
-
 async function fetchArxivPapers(query, topic, topicProfile) {
-  const url = `https://export.arxiv.org/api/query?search_query=all:${encodeURIComponent(query)}&start=0&max_results=8&sortBy=relevance&sortOrder=descending`;
+  const url = `https://export.arxiv.org/api/query?search_query=all:${encodeURIComponent(query)}&start=0&max_results=60&sortBy=relevance&sortOrder=descending`;
   const response = await fetch(url, {
     headers: { 'User-Agent': 'AutoScholar/0.6.1 (hackathon research demo)' }
   });
@@ -322,46 +371,7 @@ async function fetchArxivPapers(query, topic, topicProfile) {
 }
 
 async function retrieveEvidence(topic, researchMode, topicProfile) {
-  const query = extractQuery(topic, researchMode, topicProfile);
-  let external = [];
-  try {
-    external = await fetchArxivPapers(query, topic, topicProfile);
-  } catch {
-    external = [];
-  }
-
-  const topicFramework = buildTopicFrameworkEvidence(topic, topicProfile);
-  const paymentRail = buildPaymentRailEvidence(topic, topicProfile);
-
-  const filteredExternal = external.filter((item) => {
-    if (topicProfile.key === 'commerce') {
-      return (item.evidenceClass === 'topic-core' || /x402|stacks|agent|commerce|payment|invoice|entitlement|sbtc|usdcx|capability/i.test(`${item.title} ${item.summary}`)) && item.relevanceScore >= 5;
-    }
-    if (topicProfile.key === 'general') {
-      return item.evidenceClass !== 'off-topic' && item.relevanceScore >= 4;
-    }
-    return item.evidenceClass !== 'off-topic' || item.relevanceScore >= 4;
-  });
-
-  const topicEvidence = [...filteredExternal, ...topicFramework]
-    .sort((a, b) => b.relevanceScore - a.relevanceScore)
-    .slice(0, 6);
-
-  const paymentEvidence = paymentRail
-    .sort((a, b) => b.relevanceScore - a.relevanceScore)
-    .slice(0, 3);
-
-  const combined = [...topicEvidence, ...paymentEvidence];
-  if (combined.length === 0) {
-    throw new Error('no evidence retrieved');
-  }
-
-  return {
-    query,
-    topicEvidence,
-    paymentEvidence,
-    combined
-  };
+  return callResearchBridge('prepare', { topic });
 }
 
 function parseJSONContent(content) {
@@ -727,16 +737,41 @@ function buildAgentIdentity(roleSpec, topicProfile) {
   };
 }
 
+function extractLlmText(payload) {
+  if (!payload || typeof payload !== 'object') return '';
+  if (typeof payload.output_text === 'string' && payload.output_text.trim()) {
+    return payload.output_text;
+  }
+  if (Array.isArray(payload.output)) {
+    for (const item of payload.output) {
+      const content = Array.isArray(item?.content) ? item.content : [];
+      for (const entry of content) {
+        if (typeof entry?.text === 'string' && entry.text.trim()) {
+          return entry.text;
+        }
+      }
+    }
+  }
+  return payload?.choices?.[0]?.message?.content ?? payload?.choices?.[0]?.content ?? payload?.choices?.[0]?.text ?? '';
+}
+
 async function callLLM(messages, temperature = 0.1) {
+  logInfo('llm.call.start', {
+    model: OPENAI_MODEL,
+    providerBaseUrl: OPENAI_BASE_URL,
+    providerApiStyle: OPENAI_API_STYLE,
+    messageCount: Array.isArray(messages) ? messages.length : 0,
+    temperature,
+  });
   const rawText = await new Promise((resolve, reject) => {
-    const child = spawn('python3', [path.resolve(__dirname, './llm_tuzi.py')], {
+    const child = spawn(RESEARCH_PYTHON_BIN, [path.resolve(__dirname, './llm_tuzi.py')], {
       env: process.env,
       stdio: ['pipe', 'pipe', 'pipe']
     });
     let stdout = '';
     let stderr = '';
     let settled = false;
-    const timeoutMs = Number(process.env.LLM_TIMEOUT_MS || 20000);
+    const timeoutMs = Number(process.env.LLM_TIMEOUT_MS || 60000);
 
     const timer = setTimeout(() => {
       if (settled) return;
@@ -758,6 +793,7 @@ async function callLLM(messages, temperature = 0.1) {
       settled = true;
       clearTimeout(timer);
       if (code !== 0) {
+        logError('llm.call.process_failed', { code, stdout, stderr });
         reject(new Error(stdout || stderr || `python exited with code ${code}`));
         return;
       }
@@ -771,16 +807,86 @@ async function callLLM(messages, temperature = 0.1) {
   try {
     parsed = JSON.parse(rawText);
   } catch {
+    logError('llm.call.invalid_json_envelope', { rawText });
     throw new Error(`LLM returned non-JSON envelope: ${rawText}`);
   }
   if (parsed?.code !== undefined) {
-    if (parsed.code !== 0) throw new Error(parsed.message || JSON.stringify(parsed));
+    if (parsed.code !== 0) {
+      logError('llm.call.non_zero_code', parsed);
+      throw new Error(parsed.message || JSON.stringify(parsed));
+    }
     parsed = parsed.data || {};
   }
   if (parsed?.http_status || parsed?.error) {
+    logError('llm.call.provider_error', parsed);
     throw new Error(parsed.error || `HTTP ${parsed.http_status}`);
   }
-  return parsed?.choices?.[0]?.message?.content ?? parsed?.choices?.[0]?.content ?? parsed?.choices?.[0]?.text ?? '';
+  logInfo('llm.call.success', {
+    model: OPENAI_MODEL,
+    providerBaseUrl: OPENAI_BASE_URL,
+    providerApiStyle: OPENAI_API_STYLE,
+  });
+  return extractLlmText(parsed);
+}
+
+async function callResearchBridge(action, payload) {
+  logInfo('research.bridge.start', {
+    action,
+    topic: payload?.topic || null,
+    researchMode: payload?.researchMode || null,
+  });
+  const rawText = await new Promise((resolve, reject) => {
+    const child = spawn(RESEARCH_PYTHON_BIN, [path.resolve(__dirname, './research_bridge.py')], {
+      env: process.env,
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+    let stdout = '';
+    let stderr = '';
+    let settled = false;
+    const timeoutMs = Number(process.env.RESEARCH_TIMEOUT_MS || 300000);
+
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      child.kill('SIGTERM');
+      reject(new Error(`research bridge timeout after ${timeoutMs}ms`));
+    }, timeoutMs);
+
+    child.stdout.on('data', (chunk) => { stdout += chunk.toString(); });
+    child.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
+    child.on('error', (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      reject(error);
+    });
+    child.on('close', (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (code !== 0) {
+        logError('research.bridge.process_failed', { action, code, stdout, stderr });
+        reject(new Error(stdout || stderr || `research bridge exited with code ${code}`));
+        return;
+      }
+      resolve(stdout);
+    });
+    child.stdin.write(JSON.stringify({ action, ...payload }));
+    child.stdin.end();
+  });
+
+  try {
+    const parsed = JSON.parse(rawText);
+    logInfo('research.bridge.success', {
+      action,
+      mode: parsed?.mode || null,
+      evidenceCount: parsed?.topicEvidence?.length || parsed?.citations?.length || null,
+    });
+    return parsed;
+  } catch {
+    logError('research.bridge.invalid_json', { action, rawText });
+    throw new Error(`research bridge returned invalid JSON: ${rawText}`);
+  }
 }
 
 async function callJSONAgent(agent, role, instruction, payload, fallbackObject) {
@@ -1052,30 +1158,7 @@ async function runAIParliament(topic, researchMode, topicProfile, evidenceBundle
 }
 
 async function generateReport(topic, researchMode, topicProfile, evidenceBundle) {
-  if (!OPENAI_API_KEY) {
-    const fallback = buildFallbackReport(topic, researchMode, topicProfile, evidenceBundle);
-    const citations = buildCitationRecords(evidenceBundle.topicEvidence);
-    return {
-      ...fallback,
-      markdown: buildFallbackMarkdownReport(topic, researchMode, topicProfile, evidenceBundle, fallback, citations)
-    };
-  }
-  try {
-    const llmResult = await runAIParliament(topic, researchMode, topicProfile, evidenceBundle);
-    const citations = buildCitationRecords(evidenceBundle.topicEvidence);
-    return {
-      ...llmResult,
-      markdown: await generateAcademicMarkdownReport(topic, researchMode, topicProfile, evidenceBundle, llmResult, citations)
-    };
-  } catch (error) {
-    const fallback = buildFallbackReport(topic, researchMode, topicProfile, evidenceBundle);
-    const citations = buildCitationRecords(evidenceBundle.topicEvidence);
-    return {
-      ...fallback,
-      markdown: buildFallbackMarkdownReport(topic, researchMode, topicProfile, evidenceBundle, fallback, citations),
-      error: error.message || 'unknown llm error'
-    };
-  }
+  return callResearchBridge('report', { topic, researchMode, topicProfile, evidenceBundle });
 }
 
 function buildResearchReport(topic, researchMode, topicProfile, evidenceBundle, llmResult, extractedAssets, contractState = null) {
@@ -1105,7 +1188,7 @@ function buildResearchReport(topic, researchMode, topicProfile, evidenceBundle, 
     quality: llmResult.quality || { evidenceCoverage: evidenceBundle.topicEvidence.length, synthesisMode: 'unknown', confidence: 'unknown' },
     paymentRail: PAYMENT_RAIL,
     paymentContract: {
-      contractPrincipal: evidenceBundle.paymentEvidence?.[0]?.sourceType === 'local-kb' ? 'ST2AUTOSCHOLARTESTNETTREASURY111111111111111.autoscholar-payments' : 'ST2AUTOSCHOLARTESTNETTREASURY111111111111111.autoscholar-payments',
+      contractPrincipal: contractState?.contractPrincipal || 'ST2JXKMSH007NPYAQHKJPQMAQYAD90NQGTVJVQ02.autoscholar-payments',
       stateMachine: ['created', 'paid', 'consumed'],
       readOnlyFns: ['get-invoice', 'get-invoice-status', 'is-paid', 'is-consumed', 'has-replay-key'],
       publicFns: ['create-invoice', 'pay-invoice', 'consume-payment'],
@@ -1130,7 +1213,9 @@ app.get('/api/config', (_req, res) => {
     llmConfigured: Boolean(OPENAI_API_KEY),
     model: OPENAI_MODEL,
     providerBaseUrl: OPENAI_BASE_URL,
-    paperSource: 'topic evidence + payment rail knowledge',
+    providerApiStyle: OPENAI_API_STYLE,
+    paperSource: 'expanded arxiv topic evidence + internal frameworks',
+    paymentProtocolMode: ALLOW_DEMO_PAYMENTS ? 'stacks-x402-with-demo-fallback' : 'stacks-x402-strict',
     paymentRail: PAYMENT_RAIL,
     orchestrationMode: 'topic-aware AI Parliament + x402/Stacks premium unlock',
     stacksIntegration: {
@@ -1152,32 +1237,37 @@ app.get('/api/jobs', (_req, res) => {
 app.post('/api/research', async (req, res) => {
   const { topic } = req.body || {};
   if (!topic || typeof topic !== 'string') {
+    logWarn('research.create.invalid_topic', { requestId: req.requestId, body: req.body });
     return res.status(400).json({ error: 'topic is required' });
   }
 
   try {
-    const researchMode = deriveResearchMode(topic);
-    const topicProfile = deriveTopicProfile(topic);
-    const evidenceBundle = await retrieveEvidence(topic, researchMode, topicProfile);
+    const preparedResearch = await retrieveEvidence(topic);
+    const researchMode = preparedResearch.researchMode || deriveResearchMode(topic);
+    const topicProfile = preparedResearch.topicProfile || deriveTopicProfile(topic);
+    const evidenceBundle = preparedResearch;
     const id = makeId();
-    const stacksPayment = buildStacksPaymentRequest({ jobId: id, amount: '0.5', asset: process.env.STACKS_PAYMENT_ASSET || 'STX' });
+    const stacksPayment = buildStacksPaymentRequest({ jobId: id, amount: PAYMENT_AMOUNT, asset: process.env.STACKS_PAYMENT_ASSET || 'STX' });
     const clarityPayment = buildClarityPaymentSpec({
       jobId: id,
       recipient: stacksPayment.recipient,
-      amount: '0.5',
+      amount: PAYMENT_AMOUNT,
       asset: stacksPayment.asset,
       memo: stacksPayment.memo,
-      contract: stacksPayment.contract
+      contract: stacksPayment.contract,
+      paymentId: stacksPayment.paymentId,
+      expiresAt: stacksPayment.expiresAt,
+      nonce: stacksPayment.nonce
     });
     stacksPayment.clarity = clarityPayment;
-    const x402Challenge = buildX402Challenge({ jobId: id, amount: '0.5', asset: stacksPayment.asset, paymentRequest: stacksPayment });
+    const x402Challenge = buildX402Challenge({ jobId: id, amount: PAYMENT_AMOUNT, asset: stacksPayment.asset, paymentRequest: stacksPayment });
     const job = {
       id,
       topic,
       searchQuery: evidenceBundle.query,
       researchMode,
       topicProfile,
-      paperSource: 'topic evidence + payment rail knowledge',
+      paperSource: 'expanded arxiv topic evidence + internal frameworks',
       papers: evidenceBundle.topicEvidence,
       paymentEvidence: evidenceBundle.paymentEvidence,
       status: 'awaiting-payment',
@@ -1191,7 +1281,7 @@ app.post('/api/research', async (req, res) => {
       paymentRequest: {
         type: 'x402',
         asset: stacksPayment.asset,
-        amount: '0.5',
+        amount: PAYMENT_AMOUNT,
         recipient: stacksPayment.recipient,
         payer: stacksPayment.payer,
         assetType: stacksPayment.assetType,
@@ -1218,8 +1308,20 @@ app.post('/api/research', async (req, res) => {
     });
 
     jobs.set(id, job);
+    logInfo('research.create.success', {
+      requestId: req.requestId,
+      jobId: id,
+      topic,
+      researchMode,
+      evidenceCount: evidenceBundle.topicEvidence?.length || 0,
+    });
     return res.status(202).json(job);
   } catch (error) {
+    logError('research.create.failed', {
+      requestId: req.requestId,
+      topic,
+      error,
+    });
     return res.status(500).json({ error: error.message || 'failed to create job' });
   }
 });
@@ -1227,17 +1329,34 @@ app.post('/api/research', async (req, res) => {
 app.post('/api/jobs/:id/pay', async (req, res) => {
   const job = jobs.get(req.params.id);
   if (!job) {
+    logWarn('payment.job_not_found', { requestId: req.requestId, jobId: req.params.id });
     return res.status(404).json({ error: 'job not found' });
   }
 
+  if (job.paymentReceipt) {
+    logWarn('payment.already_paid', { requestId: req.requestId, jobId: job.id, txid: job.paymentReceipt.txid });
+    return res.status(409).json({ error: 'job is already paid', paymentReceipt: job.paymentReceipt, contractState: job.contractState });
+  }
+
+  if (isPaymentRequestExpired(job.paymentRequest?.stacks)) {
+    logWarn('payment.request_expired', { requestId: req.requestId, jobId: job.id, expiresAt: job.paymentRequest?.stacks?.expiresAt });
+    return res.status(410).json({
+      error: 'payment request expired',
+      x402: job.paymentRequest?.x402,
+      stacks: job.paymentRequest?.stacks
+    });
+  }
+
   const token = req.header('x-payment-token') || req.body?.paymentToken;
-  if (token !== DEMO_PAYMENT_TOKEN && !req.body?.txid) {
+  const authorization = req.body?.authorization || null;
+  if (!req.body?.txid && !(ALLOW_DEMO_PAYMENTS && token === DEMO_PAYMENT_TOKEN)) {
+    logWarn('payment.proof_missing', { requestId: req.requestId, jobId: job.id });
     const headers = buildX402Headers(job.paymentRequest.x402);
     Object.entries(headers).forEach(([key, value]) => res.setHeader(key, value));
     return res.status(402).json({
       error: 'payment required',
-      message: 'Provide a valid demo payment token or a Stacks transaction proof to unlock the AI Parliament report.',
-      expectedHeader: 'x-payment-token',
+      message: 'Provide a Stacks transaction proof and matching x402 authorization to unlock the AI Parliament report.',
+      expectedBody: ['txid', 'sender', 'authorization'],
       x402: job.paymentRequest.x402,
       stacks: job.paymentRequest.stacks
     });
@@ -1245,18 +1364,51 @@ app.post('/api/jobs/:id/pay', async (req, res) => {
 
   try {
     let paymentReceipt;
+    const authResult = validatePaymentAuthorization(authorization || {
+      paymentId: job.paymentRequest.x402.paymentId,
+      nonce: job.paymentRequest.x402.nonce,
+      expiresAt: job.paymentRequest.x402.expiresAt,
+      resource: job.paymentRequest.x402.resource,
+      amount: job.paymentRequest.x402.maxAmountRequired,
+    }, job.paymentRequest.x402);
+
+    if (!authResult.ok) {
+      logWarn('payment.authorization_invalid', {
+        requestId: req.requestId,
+        jobId: job.id,
+        reason: authResult.reason,
+      });
+      return res.status(400).json({ error: 'invalid payment authorization', reason: authResult.reason });
+    }
 
     if (req.body?.txid) {
+      logInfo('payment.verification.start', {
+        requestId: req.requestId,
+        jobId: job.id,
+        txid: req.body.txid,
+        sender: req.body.sender,
+      });
       const verification = await verifyStacksPayment({
         txid: req.body.txid,
         sender: req.body.sender,
         recipient: job.paymentRequest.stacks.recipient,
         amount: job.paymentRequest.amount,
         asset: job.paymentRequest.asset,
-        memo: job.paymentRequest.stacks.memo
+        memo: job.paymentRequest.stacks.memo,
+        jobId: job.id,
+        contract: job.paymentRequest.stacks.contract,
+        paymentId: job.paymentRequest.x402.paymentId,
+        paymentRequest: job.paymentRequest.stacks
       });
 
       if (!verification.ok) {
+        logWarn('payment.verification.failed', {
+          requestId: req.requestId,
+          jobId: job.id,
+          txid: req.body.txid,
+          sender: req.body.sender,
+          verification,
+        });
         return res.status(402).json({
           error: 'payment verification failed',
           verification,
@@ -1277,12 +1429,24 @@ app.post('/api/jobs/:id/pay', async (req, res) => {
         apiBase: verification.apiBase,
         memo: verification.memo,
         verificationTarget: verification.verificationTarget,
+        paymentId: verification.paymentId || job.paymentRequest.x402.paymentId,
+        nonce: job.paymentRequest.x402.nonce,
+        expiresAt: job.paymentRequest.x402.expiresAt,
+        verificationSource: verification.mode,
         invoiceStatus: 'paid',
         contractStateReader: 'get-invoice-status',
         nextContractAction: 'consume-payment',
         stateMachine: ['created', 'paid', 'consumed']
       };
-    } else {
+      logInfo('payment.verification.success', {
+        requestId: req.requestId,
+        jobId: job.id,
+        txid: verification.txid,
+        sender: verification.sender,
+        recipient: verification.recipient,
+        amount: verification.amount,
+      });
+    } else if (ALLOW_DEMO_PAYMENTS && token === DEMO_PAYMENT_TOKEN) {
       paymentReceipt = {
         asset: job.paymentRequest.asset,
         amount: job.paymentRequest.amount,
@@ -1295,11 +1459,19 @@ app.post('/api/jobs/:id/pay', async (req, res) => {
         apiBase: job.paymentRequest.stacks.apiBase,
         memo: job.paymentRequest.stacks.memo,
         verificationTarget: 'clarity-contract-call',
+        paymentId: job.paymentRequest.x402.paymentId,
+        nonce: job.paymentRequest.x402.nonce,
+        expiresAt: job.paymentRequest.x402.expiresAt,
+        verificationSource: 'demo-verification',
         invoiceStatus: 'paid',
         contractStateReader: 'get-invoice-status',
         nextContractAction: 'consume-payment',
         stateMachine: ['created', 'paid', 'consumed']
       };
+      logWarn('payment.demo_used', { requestId: req.requestId, jobId: job.id });
+    } else {
+      logWarn('payment.txid_missing', { requestId: req.requestId, jobId: job.id });
+      return res.status(400).json({ error: 'txid is required for non-demo payments' });
     }
 
     const extractedAssets = [
@@ -1329,7 +1501,23 @@ app.post('/api/jobs/:id/pay', async (req, res) => {
     };
 
     const llmResult = await generateReport(job.topic, job.researchMode, job.topicProfile, evidenceBundle);
-    const usedFallback = llmResult.mode === 'fallback';
+    const usedFallback = llmResult.mode === 'fallback' || llmResult.mode === 'python-fallback';
+    if (usedFallback) {
+      logWarn('report.fallback_used', {
+        requestId: req.requestId,
+        jobId: job.id,
+        topic: job.topic,
+        llmMode: llmResult.mode,
+        llmError: llmResult.error || null,
+      });
+    } else {
+      logInfo('report.generated', {
+        requestId: req.requestId,
+        jobId: job.id,
+        topic: job.topic,
+        llmMode: llmResult.mode,
+      });
+    }
 
     job.status = usedFallback ? 'completed_with_fallback' : 'completed';
     job.orchestration.meetingStatus = 'concluded';
@@ -1345,16 +1533,30 @@ app.post('/api/jobs/:id/pay', async (req, res) => {
       mode: llmResult.mode,
       model: OPENAI_MODEL,
       providerBaseUrl: OPENAI_BASE_URL,
+      providerApiStyle: OPENAI_API_STYLE,
       error: llmResult.error || null
     };
     job.report = buildResearchReport(job.topic, job.researchMode, job.topicProfile, evidenceBundle, llmResult, extractedAssets, job.contractState);
 
     jobs.set(job.id, job);
+    logInfo('payment.complete', {
+      requestId: req.requestId,
+      jobId: job.id,
+      txid: job.paymentReceipt?.txid,
+      status: job.status,
+      llmMode: job.llm?.mode,
+    });
     return res.json(job);
   } catch (error) {
     job.status = 'failed';
     job.error = error.message || 'failed to complete payment flow';
     jobs.set(job.id, job);
+    logError('payment.complete.failed', {
+      requestId: req.requestId,
+      jobId: job.id,
+      txid: req.body?.txid || null,
+      error,
+    });
     return res.status(500).json({ error: job.error });
   }
 });
@@ -1385,11 +1587,18 @@ app.get('/api/jobs/:id/contract-state', async (req, res) => {
 app.post('/api/jobs/:id/consume', async (req, res) => {
   const job = jobs.get(req.params.id);
   if (!job) {
+    logWarn('consume.job_not_found', { requestId: req.requestId, jobId: req.params.id });
     return res.status(404).json({ error: 'job not found' });
   }
 
   if (!job.paymentReceipt) {
+    logWarn('consume.before_payment', { requestId: req.requestId, jobId: job.id });
     return res.status(400).json({ error: 'job is not paid yet' });
+  }
+
+  if (job.paymentReceipt?.invoiceStatus === 'consumed') {
+    logWarn('consume.already_consumed', { requestId: req.requestId, jobId: job.id });
+    return res.status(409).json({ error: 'payment is already consumed', contractState: job.contractState, paymentReceipt: job.paymentReceipt });
   }
 
   job.contractState = await markContractInvoiceConsumed({
@@ -1408,18 +1617,61 @@ app.post('/api/jobs/:id/consume', async (req, res) => {
     nextContractAction: null
   };
   jobs.set(job.id, job);
+  logInfo('consume.success', {
+    requestId: req.requestId,
+    jobId: job.id,
+    txid: job.paymentReceipt?.txid,
+  });
   return res.json({ ok: true, contractState: job.contractState, paymentReceipt: job.paymentReceipt });
 });
 
 const server = app.listen(PORT, () => {
+  logInfo('server.started', { port: PORT, logPath: getLogPath() });
   console.log(`AutoScholar backend listening on http://localhost:${PORT}`);
 });
 
 server.on('error', (error) => {
   if (error?.code === 'EADDRINUSE') {
+    logError('server.port_in_use', { port: PORT, error });
     console.error(`Port ${PORT} is already in use. Set PORT to a free port and retry.`);
     process.exit(1);
   }
+  logError('server.start_failed', { error });
   console.error('Backend server failed to start:', error);
   process.exit(1);
+});
+
+process.on('unhandledRejection', (reason) => {
+  logError('process.unhandled_rejection', { reason });
+});
+
+process.on('uncaughtException', (error) => {
+  logError('process.uncaught_exception', { error });
+});
+
+let shutdownStarted = false;
+
+async function shutdown(signal) {
+  if (shutdownStarted) return;
+  shutdownStarted = true;
+  logInfo('server.shutdown.start', { signal });
+  await new Promise((resolve) => {
+    server.close(() => resolve());
+  });
+  logInfo('server.shutdown.complete', { signal });
+  process.exit(0);
+}
+
+process.on('SIGINT', () => {
+  shutdown('SIGINT').catch((error) => {
+    logError('server.shutdown.failed', { signal: 'SIGINT', error });
+    process.exit(1);
+  });
+});
+
+process.on('SIGTERM', () => {
+  shutdown('SIGTERM').catch((error) => {
+    logError('server.shutdown.failed', { signal: 'SIGTERM', error });
+    process.exit(1);
+  });
 });

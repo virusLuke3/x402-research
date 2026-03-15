@@ -1,110 +1,68 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { request as walletRequest } from '@stacks/connect';
+import { Cl, Pc } from '@stacks/transactions';
 
 const API_BASE = import.meta.env.VITE_API_BASE || '';
-const DEMO_PAYMENT_TOKEN = 'demo-paid-token';
-
-const TOPIC_PRESETS = [
-  '我想知道最近的关于solidity漏洞的文章',
-  'x402 payment gate 对 agent service monetization 的意义是什么？',
-  'Stacks settlement 在 agentic commerce 里的优缺点有哪些？',
-  '对比 Solidity 常见重入漏洞与访问控制漏洞的研究现状'
-];
-
-const JUDGE_CRITERIA = [
-  { key: 'innovation', title: 'Innovation', description: 'Treats x402 as a machine-readable capability unlock for molbots rather than a web-only paywall.' },
-  { key: 'technical', title: 'Technical depth', description: 'Shows pricing, settlement, invoice state, entitlement release, and multi-agent orchestration as one protocol.' },
-  { key: 'stacks', title: 'Stacks alignment', description: 'Centers STX, sBTC, USDCx, and Clarity invoice semantics in the architecture.' },
-  { key: 'ux', title: 'User experience', description: 'Humans see a clean dossier while molbots get explicit protocol semantics.' },
-  { key: 'impact', title: 'Impact potential', description: 'Can expand from paid reports into a wider machine-to-machine service economy.' }
-];
-
-const CHALLENGE_FIELDS = ['service', 'price', 'asset', 'recipient', 'capability', 'expiry', 'invoiceId'];
-const INVOICE_FIELDS = ['invoiceId', 'payer', 'recipient', 'asset', 'amount', 'status', 'createdAt', 'consumedAt'];
-const ENTITLEMENT_FIELDS = ['capability', 'scope', 'downloadRights', 'delegationRights', 'replayPolicy', 'proofOfPayment'];
-
-const NEGOTIATION_FLOW = [
-  'Requester molbot discovers a specialist service.',
-  'Specialist returns x402 challenge + capability terms.',
-  'Requester chooses STX / sBTC / USDCx settlement rail.',
-  'Clarity invoice moves from created to paid.',
-  'Capability entitlement is released to the buyer.',
-  'If redeemed, invoice moves to consumed to prevent replay.'
-];
-
-function buildPayloadExamples(job) {
-  const invoiceId = job?.paymentReceipt?.invoiceId || job?.paymentRequest?.invoiceId || 'inv_demo_001';
-  const asset = job?.paymentRequest?.asset || 'STX';
-  const contract = job?.paymentRequest?.stacks?.contract || 'autoscholar-payments.clar';
-  return {
-    challenge: {
-      service: 'premium-research-dossier',
-      price: '0.10',
-      asset,
-      recipient: 'autoscholar-service-principal',
-      capability: 'premium-report',
-      expiry: '2026-03-31T23:59:59Z',
-      invoiceId
-    },
-    invoice: {
-      invoiceId,
-      payer: 'molbot-buyer',
-      recipient: 'autoscholar-service-principal',
-      asset,
-      amount: '0.10',
-      status: job?.contractState?.invoiceStatus || 'created',
-      createdAt: '2026-03-12T20:00:00Z',
-      consumedAt: job?.contractState?.invoiceStatus === 'consumed' ? '2026-03-12T20:05:00Z' : null,
-      contract
-    },
-    entitlement: {
-      capability: 'premium-report',
-      scope: 'single dossier unlock',
-      downloadRights: true,
-      delegationRights: false,
-      replayPolicy: 'consume-on-redeem',
-      proofOfPayment: job?.paymentReceipt?.txid || 'demo-payment-proof'
-    }
-  };
-}
+const STACKS_NETWORK = 'testnet';
+const TX_POLL_INTERVAL_MS = 4000;
+const TX_POLL_MAX_ATTEMPTS = 40;
+const TX_EXPLORER_BASE = 'https://explorer.hiro.so/txid';
 
 async function request(path, options = {}) {
   const response = await fetch(`${API_BASE}${path}`, {
     headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
     ...options
   });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error || 'Request failed');
+  const raw = await response.text();
+  const data = raw ? safeJsonParse(raw) : {};
+  if (!response.ok) {
+    const error = new Error(data?.error || `Request failed (${response.status})`);
+    error.status = response.status;
+    error.responseData = data;
+    throw error;
+  }
   return data;
 }
 
+function safeJsonParse(value) {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return { raw: value };
+  }
+}
+
+function shortAddress(value) {
+  const text = String(value || '');
+  if (text.length < 12) return text || 'n/a';
+  return `${text.slice(0, 6)}...${text.slice(-4)}`;
+}
+
+function formatErrorMessage(error) {
+  const verificationReason = error?.responseData?.verification?.reason;
+  const backendReason = error?.responseData?.reason;
+  if (verificationReason) return `${error.message}: ${verificationReason}`;
+  if (backendReason) return `${error.message}: ${backendReason}`;
+  return error?.message || 'Request failed';
+}
+
+function buildExplorerTxUrl(txid, network = STACKS_NETWORK) {
+  return txid ? `${TX_EXPLORER_BASE}/${txid}?chain=${network}` : '';
+}
+
 function StatusPill({ status }) {
-  if (!status) return <span className="status status-idle">idle</span>;
-  return <span className={`status status-${status}`}>{String(status).replaceAll('_', ' ')}</span>;
+  const label = status ? String(status).replaceAll('_', ' ') : 'idle';
+  return <span className={`statusPill status-${status || 'idle'}`}>{label}</span>;
 }
 
-function StatTile({ label, value, tone = 'default' }) {
-  return <div className={`statTile statTile-${tone}`}><span>{label}</span><strong>{value}</strong></div>;
-}
-
-function JudgeCard({ title, description }) {
-  return <article className="judgeCard miniPanel"><p className="panelKicker">Judge signal</p><h3>{title}</h3><p>{description}</p></article>;
-}
-
-function AlignmentRow({ label, value, strong = false }) {
-  return <div className="alignmentRow"><span>{label}</span><strong className={strong ? 'is-strong' : ''}>{value}</strong></div>;
-}
-
-function SpecCard({ title, kicker, fields, accent }) {
+function DetailRow({ label, value, mono = false }) {
   return (
-    <article className={`specCard miniPanel ${accent ? 'specCardAccent' : ''}`}>
-      <p className="panelKicker">{kicker}</p>
-      <h3>{title}</h3>
-      <div className="specFields">
-        {fields.map((field) => <span key={field} className="specField">{field}</span>)}
-      </div>
-    </article>
+    <div className="detailRow">
+      <span>{label}</span>
+      <strong className={mono ? 'monoText' : ''}>{value}</strong>
+    </div>
   );
 }
 
@@ -113,18 +71,153 @@ export default function App() {
   const [job, setJob] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [walletAddress, setWalletAddress] = useState('');
+  const [walletStatus, setWalletStatus] = useState('disconnected');
+  const [paymentReadiness, setPaymentReadiness] = useState(null);
+  const [readinessLoading, setReadinessLoading] = useState(false);
+  const [executionLog, setExecutionLog] = useState([]);
+  const [paymentTxid, setPaymentTxid] = useState('');
+  const [verificationDetails, setVerificationDetails] = useState(null);
+
+  useEffect(() => {
+    refreshPaymentReadiness({ silent: false }).catch(() => undefined);
+  }, []);
+
+  function pushExecutionEvent(message, tone = 'info') {
+    setExecutionLog((current) => [
+      ...current,
+      {
+        id: `${Date.now()}_${current.length}`,
+        message,
+        tone
+      }
+    ]);
+  }
+
+  async function refreshPaymentReadiness({ silent = true } = {}) {
+    if (!silent) setReadinessLoading(true);
+    try {
+      const readiness = await request('/api/payment/readiness');
+      setPaymentReadiness(readiness);
+      return readiness;
+    } catch (err) {
+      if (!silent) {
+        setError(formatErrorMessage(err));
+      }
+      throw err;
+    } finally {
+      if (!silent) setReadinessLoading(false);
+    }
+  }
 
   async function createJob(event) {
     event.preventDefault();
     setLoading(true);
     setError('');
+    setJob(null);
+    setVerificationDetails(null);
+    setPaymentTxid('');
+    setExecutionLog([]);
+    pushExecutionEvent('Submitting research task to the manager agent', 'info');
+
     try {
-      const created = await request('/api/research', { method: 'POST', body: JSON.stringify({ topic }) });
+      const created = await request('/api/research', {
+        method: 'POST',
+        body: JSON.stringify({ topic })
+      });
       setJob(created);
+      pushExecutionEvent(`Evidence scan complete: ${created?.papers?.length || 0} sources prepared`, 'success');
+      pushExecutionEvent('x402 payment challenge created. Payment is required before premium synthesis.', 'muted');
     } catch (err) {
-      setError(err.message);
+      const message = formatErrorMessage(err);
+      setError(message);
+      pushExecutionEvent(message, 'error');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function connectWallet(forceWalletSelect = true) {
+    const response = await walletRequest(
+      { forceWalletSelect, persistWalletSelect: true, enableLocalStorage: true },
+      'stx_getAddresses',
+      { network: STACKS_NETWORK }
+    );
+    const addressEntry = (response?.addresses || []).find((entry) => String(entry.address || '').startsWith('ST'));
+    if (!addressEntry?.address) {
+      throw new Error('No Stacks testnet address returned by wallet');
+    }
+    setWalletAddress(addressEntry.address);
+    setWalletStatus('connected');
+    pushExecutionEvent(`Wallet connected: ${shortAddress(addressEntry.address)}`, 'success');
+    return addressEntry.address;
+  }
+
+  async function handleConnectWallet() {
+    setError('');
+    try {
+      setWalletStatus('connecting');
+      pushExecutionEvent('Connecting Leather wallet', 'info');
+      await connectWallet(true);
+    } catch (err) {
+      const message = formatErrorMessage(err);
+      setError(message);
+      pushExecutionEvent(message, 'error');
+      setWalletStatus('disconnected');
+    }
+  }
+
+  function buildContractCallArgs(paymentRequest) {
+    const args = paymentRequest?.clarity?.expectedArgs || [];
+    return args.map((arg) => {
+      if (arg.name === 'recipient') return Cl.standardPrincipal(String(arg.value));
+      if (arg.type === 'uint') return Cl.uint(BigInt(String(arg.value)));
+      return Cl.stringAscii(String(arg.value));
+    });
+  }
+
+  function buildAuthorization(paymentRequest) {
+    return {
+      paymentId: paymentRequest?.x402?.paymentId,
+      nonce: paymentRequest?.x402?.nonce,
+      expiresAt: paymentRequest?.x402?.expiresAt,
+      resource: paymentRequest?.x402?.resource,
+      amount: paymentRequest?.x402?.maxAmountRequired
+    };
+  }
+
+  async function waitForTxSuccess(txid, apiBase, onUpdate) {
+    for (let attempt = 0; attempt < TX_POLL_MAX_ATTEMPTS; attempt += 1) {
+      const response = await fetch(`${apiBase}/extended/v1/tx/${txid}`);
+      if (!response.ok) {
+        throw new Error(`Failed to inspect transaction ${txid}`);
+      }
+      const tx = await response.json();
+      onUpdate?.(tx, attempt + 1);
+      if (tx?.tx_status === 'success') {
+        return tx;
+      }
+      if (
+        tx?.tx_status &&
+        tx.tx_status !== 'pending' &&
+        tx.tx_status !== 'pending_anchor_block' &&
+        tx.tx_status !== 'pending_microblock'
+      ) {
+        throw new Error(`Transaction failed: ${tx.tx_status}`);
+      }
+      await new Promise((resolve) => window.setTimeout(resolve, TX_POLL_INTERVAL_MS));
+    }
+    throw new Error('Timed out waiting for transaction confirmation');
+  }
+
+  async function ensureContractDeployed(contractPrincipal, apiBase) {
+    const [address, contractName] = String(contractPrincipal || '').split('.');
+    if (!address || !contractName) {
+      throw new Error('Invalid Stacks contract principal');
+    }
+    const response = await fetch(`${apiBase}/v2/contracts/source/${address}/${contractName}`);
+    if (!response.ok) {
+      throw new Error('Stacks testnet contract is not deployed yet. Deploy autoscholar-payments and set STACKS_PAYMENT_CONTRACT first.');
     }
   }
 
@@ -132,300 +225,370 @@ export default function App() {
     if (!job?.id) return;
     setLoading(true);
     setError('');
+    setVerificationDetails(null);
+    setPaymentTxid('');
+
     try {
+      const readiness = await refreshPaymentReadiness({ silent: true });
+      if (readiness?.missing?.length) {
+        throw new Error(`Payment rail is not ready: missing ${readiness.missing.join(', ')}`);
+      }
+      if (!readiness?.contract?.deployed) {
+        throw new Error('Stacks testnet contract is not deployed yet. Deploy autoscholar-payments and update STACKS_PAYMENT_CONTRACT first.');
+      }
+
+      const sender = walletAddress || await connectWallet(false).catch(() => connectWallet(true));
+      pushExecutionEvent(`Using sender ${shortAddress(sender)} on ${STACKS_NETWORK}`, 'info');
+
+      const paymentRequest = job.paymentRequest;
+      const contractId = paymentRequest?.clarity?.contractPrincipal;
+      if (!contractId || !contractId.includes('.')) {
+        throw new Error('Stacks contract principal is not configured');
+      }
+
+      await ensureContractDeployed(contractId, paymentRequest?.stacks?.apiBase || 'https://api.testnet.hiro.so');
+      pushExecutionEvent(`Contract ready: ${contractId}`, 'success');
+
+      const postConditions = paymentRequest?.asset === 'STX'
+        ? [Pc.principal(sender).willSendEq(BigInt(String(paymentRequest.amount))).ustx()]
+        : [];
+
+      setWalletStatus('signing');
+      pushExecutionEvent(`Waiting for Leather to sign ${paymentRequest?.stacks?.displayAmount || `${paymentRequest.amount} ${paymentRequest.asset}`}`, 'info');
+
+      const txResult = await walletRequest(
+        { forceWalletSelect: false, persistWalletSelect: true, enableLocalStorage: true },
+        'stx_callContract',
+        {
+          contract: contractId,
+          functionName: paymentRequest?.clarity?.publicFunction || 'pay-invoice',
+          functionArgs: buildContractCallArgs(paymentRequest),
+          network: STACKS_NETWORK,
+          postConditions,
+          postConditionMode: 'deny',
+          address: sender
+        }
+      );
+
+      if (!txResult?.txid) {
+        throw new Error('Wallet did not return a transaction id');
+      }
+
+      setWalletStatus('broadcasted');
+      setPaymentTxid(txResult.txid);
+      pushExecutionEvent(`Transaction broadcasted: ${txResult.txid}`, 'success');
+
+      await waitForTxSuccess(
+        txResult.txid,
+        paymentRequest?.stacks?.apiBase || 'https://api.testnet.hiro.so',
+        (tx, attempt) => {
+          const tone = tx?.tx_status === 'success' ? 'success' : 'info';
+          pushExecutionEvent(`Hiro poll #${attempt}: ${tx?.tx_status || 'unknown'}`, tone);
+        }
+      );
+
+      setWalletStatus('verifying');
+      pushExecutionEvent('Payment confirmed on Hiro. Submitting proof to backend and starting agent workflow.', 'info');
+
       const completed = await request(`/api/jobs/${job.id}/pay`, {
         method: 'POST',
-        headers: { 'x-payment-token': DEMO_PAYMENT_TOKEN },
-        body: JSON.stringify({ paymentToken: DEMO_PAYMENT_TOKEN })
+        body: JSON.stringify({
+          txid: txResult.txid,
+          sender,
+          authorization: buildAuthorization(paymentRequest)
+        })
       });
-      setJob(completed);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }
 
-  async function consumeEntitlement() {
-    if (!job?.id) return;
-    setLoading(true);
-    setError('');
-    try {
-      await request(`/api/jobs/${job.id}/consume`, { method: 'POST' });
-      const refreshed = await request(`/api/jobs/${job.id}`);
-      setJob(refreshed);
+      setJob(completed);
+      setVerificationDetails(completed?.paymentReceipt || null);
+      if (completed?.status === 'completed_with_fallback') {
+        pushExecutionEvent('Payment verified, but report fell back to degraded synthesis.', 'warn');
+      } else {
+        pushExecutionEvent('Payment verified. Agent workflow completed and report unlocked.', 'success');
+      }
+      setWalletStatus('connected');
     } catch (err) {
-      setError(err.message);
+      setVerificationDetails(err?.responseData?.verification || null);
+      const message = formatErrorMessage(err);
+      setError(message);
+      pushExecutionEvent(message, 'error');
+      setWalletStatus(walletAddress ? 'connected' : 'disconnected');
     } finally {
       setLoading(false);
     }
   }
 
   const reportMarkdown = job?.report?.markdown?.trim();
-  const topicLength = topic.trim().length;
   const hasReport = Boolean(job?.report);
+  const paymentStatus = job?.paymentReceipt
+    ? 'paid'
+    : job?.status === 'awaiting-payment'
+      ? 'pending'
+      : job?.status === 'failed'
+        ? 'failed'
+        : job
+          ? 'processing'
+          : 'idle';
+  const displayAmount = job?.paymentRequest?.stacks?.displayAmount || paymentReadiness?.displayAmount || '0.5 STX';
+  const contractPrincipal = paymentReadiness?.paymentContract || job?.paymentRequest?.stacks?.contract || 'Not configured';
+  const recipient = paymentReadiness?.recipient || job?.paymentRequest?.recipient || 'Not configured';
+  const network = paymentReadiness?.network || job?.paymentRequest?.stacks?.network || STACKS_NETWORK;
+  const txExplorerUrl = buildExplorerTxUrl(paymentTxid || job?.paymentReceipt?.txid, network);
+  const canPay = Boolean(job?.status === 'awaiting-payment');
+  const walletReady = walletStatus === 'connected' && walletAddress;
+  const unlockLabel = walletReady
+    ? `Sign & Pay ${displayAmount} to Unlock Agent Data`
+    : `Connect Leather Wallet`;
 
-  const timeline = useMemo(() => {
-    const currentStatus = job?.status;
-    return [
-      { key: 'draft', title: 'Draft topic', description: 'Define the research question and scope.', active: topicLength > 0 && !job, complete: Boolean(job) },
-      { key: 'awaiting-payment', title: 'Payment gate', description: 'The premium dossier waits behind x402 unlock.', active: currentStatus === 'awaiting-payment', complete: currentStatus === 'completed' || currentStatus === 'completed_with_fallback' },
-      { key: 'completed', title: 'Read dossier', description: 'The final report is unlocked and rendered below.', active: currentStatus === 'completed' || currentStatus === 'completed_with_fallback', complete: currentStatus === 'completed' || currentStatus === 'completed_with_fallback' }
-    ];
-  }, [job, topicLength]);
+  const terminalEntries = useMemo(() => {
+    const entries = [...executionLog];
+    if (!entries.length && !job) return [];
 
-  const summaryStats = useMemo(() => ({
-    mode: job?.researchMode || 'analysis',
-    papers: job?.papers?.length || 0,
-    paymentEvidence: job?.paymentEvidence?.length || 0,
-    status: job?.status || 'idle'
-  }), [job]);
+    if (job && !executionLog.length) {
+      entries.push({
+        id: 'job-created',
+        message: `Task created for topic: ${job.topic}`,
+        tone: 'info'
+      });
+      if (job?.papers?.length) {
+        entries.push({
+          id: 'job-evidence',
+          message: `Evidence scan complete: ${job.papers.length} sources prepared`,
+          tone: 'success'
+        });
+      }
+    }
 
-  const stacksSummary = useMemo(() => {
-    const payment = job?.paymentRequest;
-    const stacks = payment?.stacks;
-    return {
-      network: stacks?.network || 'testnet scaffold',
-      asset: payment?.asset || 'STX / sBTC / USDCx-ready',
-      contract: stacks?.contract || 'autoscholar-payments.clar',
-      unlock: payment?.type || 'x402 capability unlock'
-    };
-  }, [job]);
+    if (job?.status === 'awaiting-payment' && !job?.paymentReceipt) {
+      entries.push({
+        id: 'job-locked',
+        message: `Awaiting x402 payment to unlock premium research synthesis for ${displayAmount}`,
+        tone: 'muted'
+      });
+    }
 
-  const judgeReadiness = useMemo(() => {
-    if (!job) return 'concept-ready';
-    if (job.status === 'completed' || job.status === 'completed_with_fallback') return 'demo-proven';
-    if (job.status === 'awaiting-payment') return 'flow-proven';
-    return 'in-progress';
-  }, [job]);
+    if (job?.status === 'completed' && hasReport) {
+      entries.push({
+        id: 'job-ready',
+        message: 'Final report ready for review',
+        tone: 'success'
+      });
+    }
 
-  const reportMeta = useMemo(() => ({
-    synthesisMode: job?.report?.quality?.synthesisMode || job?.llm?.mode || 'unknown',
-    confidence: job?.report?.quality?.confidence || 'unknown',
-    contractState: job?.contractState?.invoiceStatus || 'created'
-  }), [job]);
+    if (job?.status === 'completed_with_fallback') {
+      entries.push({
+        id: 'job-fallback',
+        message: 'Workflow completed with fallback synthesis',
+        tone: 'warn'
+      });
+    }
 
-  const payloadExamples = useMemo(() => buildPayloadExamples(job), [job]);
+    if (job?.status === 'failed') {
+      entries.push({
+        id: 'job-failed',
+        message: job.error || 'Workflow failed before report output',
+        tone: 'error'
+      });
+    }
+
+    return entries;
+  }, [displayAmount, executionLog, hasReport, job]);
 
   return (
-    <div className="page">
-      <div className="pageGlow pageGlowA" aria-hidden="true" />
-      <div className="pageGlow pageGlowB" aria-hidden="true" />
-
-      <header className="topbar panelLite" aria-label="Application header">
-        <div className="brandLockup">
-          <span className="brandMark" aria-hidden="true">◈</span>
-          <div>
-            <p className="brandName">AutoScholar V8.3</p>
-            <p className="brandSub">Protocol spec + planner-reviewed research synthesis</p>
-          </div>
+    <div className="appShell">
+      <header className="appHeader">
+        <div>
+          <p className="appEyebrow">AutoScholar</p>
+          <h1>x402-powered agent research</h1>
         </div>
-        <div className="topbarMeta">
-          <span className="badge">Hackathon judge mode</span>
+        <div className="headerMeta">
+          <span className="headerMetaItem">{walletAddress ? shortAddress(walletAddress) : 'Wallet not connected'}</span>
           <StatusPill status={job?.status} />
         </div>
       </header>
 
-      <section className="heroSplit panel">
-        <div className="heroMain stack-lg">
-          <div className="heroHead stack-sm">
-            <span className="eyebrow">Agentic commerce on Stacks</span>
-            <h1>A protocol spec for molbots that pay, get paid, and unlock capabilities.</h1>
-            <p className="heroText">
-              V8.3 moves from protocol storytelling to protocol specification. It shows how x402 challenge payloads, Clarity invoice state,
-              capability entitlements, and planner-reviewed report generation can work together as a real molbot commerce rail.
-            </p>
-          </div>
-          <div className="statsGrid" aria-label="Current summary stats">
-            <StatTile label="Research mode" value={summaryStats.mode} tone="accent" />
-            <StatTile label="Topic evidence" value={String(summaryStats.papers)} />
-            <StatTile label="Synthesis mode" value={reportMeta.synthesisMode} />
-            <StatTile label="Judge readiness" value={judgeReadiness} tone="warn" />
-          </div>
-        </div>
-
-        <aside className="heroRail panelInset">
-          <div className="sectionTitleRow"><div><p className="panelKicker">Workflow state</p><h2>Current path</h2></div></div>
-          <ol className="timeline">
-            {timeline.map((item, index) => (
-              <li key={item.key} className={`timelineItem ${item.active ? 'is-active' : ''} ${item.complete ? 'is-complete' : ''}`}>
-                <div className="timelineMarker" aria-hidden="true"><span>{index + 1}</span></div>
-                <div><h3>{item.title}</h3><p>{item.description}</p></div>
-              </li>
-            ))}
-          </ol>
-        </aside>
-      </section>
-
-      <section className="judgeBoard panel">
-        <div className="sectionHeader sectionHeader-start judgeBoardHeader">
-          <div><p className="panelKicker">Judge-facing framing</p><h2>How V8.3 maps to the hackathon scorecard</h2></div>
-          <p className="helperText judgeBoardHint">This version makes the protocol semantics and the report-generation rigor more legible.</p>
-        </div>
-        <div className="judgeGrid">{JUDGE_CRITERIA.map((item) => <JudgeCard key={item.key} title={item.title} description={item.description} />)}</div>
-      </section>
-
-      <section className="specBoard panel">
-        <div className="sectionHeader sectionHeader-start judgeBoardHeader">
-          <div><p className="panelKicker">Protocol specification</p><h2>x402 challenge schema, invoice schema, and entitlement schema</h2></div>
-          <p className="helperText judgeBoardHint">The point is to show protocol-level thinking, not only product mockups.</p>
-        </div>
-
-        <div className="specGrid">
-          <SpecCard title="x402 challenge schema" kicker="Pricing envelope" fields={CHALLENGE_FIELDS} accent />
-          <SpecCard title="Invoice state schema" kicker="Clarity lifecycle" fields={INVOICE_FIELDS} />
-          <SpecCard title="Capability entitlement schema" kicker="Post-payment rights" fields={ENTITLEMENT_FIELDS} />
-        </div>
-
-        <div className="sequencePanel panelInset">
-          <p className="panelKicker">Negotiation + settlement sequence</p>
-          <ol className="sequenceList">
-            {NEGOTIATION_FLOW.map((step) => <li key={step}>{step}</li>)}
-          </ol>
-        </div>
-
-        <div className="payloadGrid">
-          <article className="miniPanel payloadCard">
-            <p className="panelKicker">Example x402 challenge</p>
-            <pre className="payloadPre">{JSON.stringify(payloadExamples.challenge, null, 2)}</pre>
-          </article>
-          <article className="miniPanel payloadCard">
-            <p className="panelKicker">Example invoice object</p>
-            <pre className="payloadPre">{JSON.stringify(payloadExamples.invoice, null, 2)}</pre>
-          </article>
-          <article className="miniPanel payloadCard">
-            <p className="panelKicker">Example entitlement object</p>
-            <pre className="payloadPre">{JSON.stringify(payloadExamples.entitlement, null, 2)}</pre>
-          </article>
-        </div>
-      </section>
-
-      <main className="workspaceGrid workspaceGridV8">
-        <section className="panel composerCard" aria-labelledby="compose-heading">
-          <div className="sectionHeader sectionHeader-start">
-            <div><p className="panelKicker">Compose query</p><h2 id="compose-heading">Frame the research question</h2></div>
-            <div className="counterGroup"><span className="counterChip">{topicLength} chars</span></div>
-          </div>
-
-          <div className="presetRow" aria-label="Suggested topics">
-            {TOPIC_PRESETS.map((preset) => (
-              <button key={preset} type="button" className={`presetChip ${topic === preset ? 'is-active' : ''}`} onClick={() => setTopic(preset)}>{preset}</button>
-            ))}
-          </div>
-
-          <form onSubmit={createJob} className="stack-lg">
-            <label className="fieldLabel" htmlFor="topic-input">Research brief</label>
-            <textarea id="topic-input" value={topic} onChange={(e) => setTopic(e.target.value)} rows={8} placeholder="Ask for recent Solidity vulnerabilities, x402 payment design tradeoffs, or Stacks settlement architecture…" />
-            <div className="actionRow">
-              <button className="primaryButton" disabled={loading}>{loading ? 'Working…' : 'Create research job'}</button>
-              <p className="helperText">API base: {API_BASE || 'same-origin /api proxy'}</p>
+      <main className="workspaceGrid">
+        <section className="workspaceCard">
+          <div className="cardHeader">
+            <div>
+              <p className="cardEyebrow">Column 1</p>
+              <h2>Research Task</h2>
             </div>
+            <span className="cardHint">{API_BASE || '/api proxy'}</span>
+          </div>
+
+          <p className="cardCopy">
+            Describe the research question. The system will scan evidence first, then gate premium synthesis behind x402 payment.
+          </p>
+
+          <form onSubmit={createJob} className="queryForm">
+            <textarea
+              id="topic-input"
+              value={topic}
+              onChange={(event) => setTopic(event.target.value)}
+              rows={10}
+              placeholder="Describe the research topic you want the agent to investigate..."
+            />
+            <button className="primaryButton" disabled={loading}>
+              {loading && !canPay ? 'Scanning...' : 'Submit Research Task'}
+            </button>
           </form>
 
-          {error ? <p className="error" role="alert">{error}</p> : null}
+          {error ? <p className="errorBanner" role="alert">{error}</p> : null}
 
-          <div className="subgrid">
-            <article className="miniPanel infoPanel">
-              <p className="panelKicker">Planner-reviewed report path</p>
-              <ul className="list compact">
-                <li>Outline planner defines section goals before long-form writing</li>
-                <li>Reviewer checks evidence strength, overclaims, and missing sections</li>
-                <li>Final writer produces markdown dossier using the reviewed plan</li>
-                <li>Fallback still returns structured literature-style output</li>
-              </ul>
-            </article>
-            <article className="miniPanel infoPanel">
-              <p className="panelKicker">Why judges should care</p>
-              <ul className="list compact">
-                <li>Protocol semantics are explicit enough for future wallet and molbot integration.</li>
-                <li>Report quality now depends on process rigor, not one lucky generation.</li>
-                <li>Capability unlock semantics are visible and composable.</li>
-                <li>The same rail can support research, shopping, and specialist skill commerce.</li>
-              </ul>
-            </article>
-          </div>
-        </section>
-
-        <aside className="panel stacksCard" aria-labelledby="stacks-heading">
-          <div className="sectionHeader sectionHeader-start">
-            <div><p className="panelKicker">Stacks alignment</p><h2 id="stacks-heading">Protocol proof panel</h2></div>
-            <span className="badge badgeStacks">Stacks-native hooks</span>
-          </div>
-
-          <div className="stack-lg">
-            <div className="miniPanel alignmentPanel">
-              <AlignmentRow label="Settlement network" value={stacksSummary.network} strong />
-              <AlignmentRow label="Unlock primitive" value={stacksSummary.unlock} />
-              <AlignmentRow label="Settlement asset" value={stacksSummary.asset} />
-              <AlignmentRow label="Clarity contract" value={stacksSummary.contract} />
-            </div>
-            <div className="miniPanel lifecyclePanel">
-              <p className="panelKicker">Invoice lifecycle</p>
-              <div className="lifecycleTrack">
-                <span className="lifecycleStep is-active">created</span>
-                <span className="lifecycleArrow">→</span>
-                <span className={`lifecycleStep ${job?.paymentReceipt ? 'is-active' : ''}`}>paid</span>
-                <span className="lifecycleArrow">→</span>
-                <span className={`lifecycleStep ${reportMeta.contractState === 'consumed' ? 'is-active' : ''}`}>consumed</span>
+          {job ? (
+            <div className="summaryCard">
+              <div className="summaryHeader">
+                <h3>Task Summary</h3>
+                <StatusPill status={job.status} />
+              </div>
+              <div className="summaryRows">
+                <DetailRow label="Job ID" value={job.id} mono />
+                <DetailRow label="Research Mode" value={job.researchMode || 'analysis'} />
+                <DetailRow label="Evidence Prepared" value={`${job?.papers?.length || 0} sources`} />
               </div>
             </div>
-            <div className="miniPanel">
-              <p className="panelKicker">Report QA meta</p>
-              <AlignmentRow label="Synthesis mode" value={reportMeta.synthesisMode} />
-              <AlignmentRow label="Confidence" value={reportMeta.confidence} />
-              <AlignmentRow label="Payment evidence" value={String(summaryStats.paymentEvidence)} />
+          ) : (
+            <div className="placeholderState">
+              Submit a topic to create an agent task and generate an x402 payment challenge.
+            </div>
+          )}
+        </section>
+
+        <section className="workspaceCard">
+          <div className="cardHeader">
+            <div>
+              <p className="cardEyebrow">Column 2</p>
+              <h2>Payment Gateway</h2>
+            </div>
+            <StatusPill status={paymentStatus} />
+          </div>
+
+          <p className="cardCopy">
+            This card merges the x402 payment details and Leather wallet actions into one focused payment flow.
+          </p>
+
+          <div className="gatewayGrid">
+            <DetailRow label="Network" value={network} />
+            <DetailRow label="Asset & Price" value={displayAmount} />
+            <DetailRow label="Recipient" value={shortAddress(recipient)} mono />
+            <DetailRow label="Contract" value={contractPrincipal} mono />
+          </div>
+
+          <div className="walletPanel">
+            <div className="walletHeader">
+              <div>
+                <h3>Leather Wallet</h3>
+                <p>{walletAddress ? 'Wallet connected and ready for testnet signing.' : 'Connect a Stacks testnet wallet to continue.'}</p>
+              </div>
+              <button
+                type="button"
+                className="secondaryButton"
+                onClick={handleConnectWallet}
+                disabled={loading}
+              >
+                {walletAddress ? 'Reconnect Leather Wallet' : 'Connect Leather Wallet'}
+              </button>
+            </div>
+
+            <div className="walletDetails">
+              <DetailRow label="Wallet Address" value={walletAddress || 'Not connected'} mono />
+              <DetailRow label="Wallet Status" value={walletStatus.replaceAll('_', ' ')} />
             </div>
           </div>
-        </aside>
 
-        <section className="panel reportCard" aria-labelledby="report-heading">
-          <div className="sectionHeader sectionHeader-start">
-            <div><p className="panelKicker">Output view</p><h2 id="report-heading">Research dossier</h2></div>
-            <StatusPill status={job?.status} />
+          <button
+            type="button"
+            className="primaryButton primaryButtonWide"
+            onClick={walletReady ? payAndComplete : handleConnectWallet}
+            disabled={loading || !job}
+          >
+            {canPay ? unlockLabel : 'Create a research task before payment'}
+          </button>
+
+          <div className="gatewayNotes">
+            {paymentReadiness?.warnings?.map((warning) => (
+              <p key={warning} className="notice noticeWarn">{warning}</p>
+            ))}
+            {paymentReadiness?.missing?.map((missing) => (
+              <p key={missing} className="notice noticeError">Missing configuration: {missing}</p>
+            ))}
+            {!job ? (
+              <p className="notice noticeMuted">No active task yet. Submit a topic first, then sign the payment request.</p>
+            ) : null}
+          </div>
+
+          {verificationDetails ? (
+            <div className="receiptCard">
+              <h3>Payment Receipt</h3>
+              <div className="summaryRows">
+                <DetailRow label="Transaction" value={verificationDetails.txid || paymentTxid || 'n/a'} mono />
+                <DetailRow label="Sender" value={verificationDetails.sender || walletAddress || 'n/a'} mono />
+                <DetailRow label="Invoice State" value={verificationDetails.invoiceStatus || paymentStatus} />
+              </div>
+            </div>
+          ) : null}
+
+          {txExplorerUrl ? (
+            <a className="textLink" href={txExplorerUrl} target="_blank" rel="noreferrer">
+              View transaction in Hiro Explorer
+            </a>
+          ) : null}
+        </section>
+
+        <section className="workspaceCard terminalColumn">
+          <div className="cardHeader">
+            <div>
+              <p className="cardEyebrow">Column 3</p>
+              <h2>Agent Terminal</h2>
+            </div>
+            <span className="cardHint">{hasReport ? 'Result Output' : 'Execution Log'}</span>
           </div>
 
           {!job ? (
-            <div className="emptyState panelInset"><div className="emptyOrb" aria-hidden="true" /><h3>No active dossier</h3><p>Submit a topic on the left. Once the research job is created, this panel becomes the active dossier view.</p></div>
+            <div className="terminalLocked">
+              Awaiting a research task. Submit a topic to initialize the agent workflow.
+            </div>
           ) : (
-            <div className="stack-lg">
-              <div className="jobMetaGrid">
-                <div className="miniPanel"><p className="panelKicker">Job id</p><p className="monoText">{job.id || 'pending'}</p></div>
-                <div className="miniPanel"><p className="panelKicker">Research mode</p><p>{job.researchMode || 'analysis'}</p></div>
-                <div className="miniPanel"><p className="panelKicker">Topic evidence</p><p>{job.papers?.length || 0}</p></div>
-              </div>
-
-              <div className="miniPanel topicBanner"><p className="panelKicker">Topic</p><p>{job.topic}</p></div>
-
-              {job.status === 'awaiting-payment' ? (
-                <div className="unlockCard panelInset">
-                  <div className="unlockHeader"><div><p className="panelKicker">Payment required</p><h3>Unlock the premium dossier</h3></div><span className="tokenPill">x402 gate</span></div>
-                  <p>{job.paymentRequest?.reason || 'Payment is required before the report can be revealed.'}</p>
-                  <button className="primaryButton" onClick={payAndComplete} disabled={loading}>{loading ? 'Processing payment…' : 'Unlock report'}</button>
+            <div className="terminalStack">
+              {job.status === 'awaiting-payment' && !job.paymentReceipt ? (
+                <div className="terminalLocked">
+                  Awaiting x402 payment to fetch premium research materials and unlock agent synthesis.
                 </div>
               ) : null}
 
-              {hasReport ? (
-                <article className="reportBody panelInset stack-lg">
-                  <div className="reportLead"><div><p className="panelKicker">Unlocked markdown</p><p className="reportTopic">{job.topic}</p></div><div className="reportHint">Planner → reviewer → final writer dossier path</div></div>
-                  <div className="entitlementBar">
-                    <div>
-                      <p className="panelKicker">Entitlement state</p>
-                      <p className="reportHint">Current invoice state: {reportMeta.contractState}</p>
+              {terminalEntries.length ? (
+                <div className="terminalLog">
+                  {terminalEntries.map((entry) => (
+                    <div key={entry.id} className={`terminalLine terminalLine-${entry.tone}`}>
+                      <span className="terminalDot" />
+                      <p>{entry.message}</p>
                     </div>
-                    <button
-                      type="button"
-                      className="secondaryButton"
-                      onClick={consumeEntitlement}
-                      disabled={loading || reportMeta.contractState === 'consumed'}
-                    >
-                      {reportMeta.contractState === 'consumed' ? 'Entitlement consumed' : 'Consume entitlement'}
-                    </button>
+                  ))}
+                </div>
+              ) : null}
+
+              {job.status === 'processing' && !hasReport ? (
+                <div className="processingState">
+                  Agent workflow is running. The backend is synthesizing the final report.
+                </div>
+              ) : null}
+
+              {reportMarkdown ? (
+                <article className="reportCard">
+                  <div className="reportHeader">
+                    <h3>Research Report</h3>
+                    <StatusPill status={job.status} />
                   </div>
-                  {reportMarkdown ? <div className="markdownReport"><ReactMarkdown remarkPlugins={[remarkGfm]}>{reportMarkdown}</ReactMarkdown></div> : <p className="muted">The report content is not available yet.</p>}
+                  <div className="markdownReport">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{reportMarkdown}</ReactMarkdown>
+                  </div>
                 </article>
-              ) : (
-                <div className="emptyState panelInset emptyStateCompact"><h3>Report not revealed yet</h3><p>The job exists, but the dossier content is still waiting for the next workflow step.</p></div>
-              )}
+              ) : null}
+
+              {!reportMarkdown && job.status !== 'processing' && job.status !== 'awaiting-payment' ? (
+                <div className="placeholderState">No report output yet.</div>
+              ) : null}
             </div>
           )}
         </section>

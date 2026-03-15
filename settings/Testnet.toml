@@ -4,4 +4,6 @@ node_rpc_address = "https://api.testnet.hiro.so"
 deployment_fee_rate = 10
 
 [accounts.deployer]
-mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+# Do not store a real deployer mnemonic in this file.
+# Use scripts/deploy-testnet.sh or export STACKS_DEPLOYER_MNEMONIC for one-shot deployments.
+mnemonic = "REPLACE_AT_RUNTIME_DO_NOT_COMMIT_REAL_SECRET"

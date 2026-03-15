@@ -1,9 +1,10 @@
 const inMemoryInvoiceState = new Map();
 
 export function seedContractInvoiceState({ jobId, invoiceStatus = 'created', paymentRequest, paymentReceipt = null }) {
+  const replayKey = paymentRequest?.clarity?.replayKey || paymentRequest?.verificationPlan?.replayKey || null;
   inMemoryInvoiceState.set(jobId, {
     jobId,
-    source: 'adapter-simulated',
+    source: paymentReceipt?.verificationSource || 'backend-ledger',
     contractPrincipal: paymentRequest?.clarity?.contractPrincipal || paymentRequest?.stacks?.contract || null,
     invoiceStatus,
     paid: invoiceStatus === 'paid' || invoiceStatus === 'consumed',
@@ -11,6 +12,9 @@ export function seedContractInvoiceState({ jobId, invoiceStatus = 'created', pay
     readOnlyFns: ['get-invoice', 'get-invoice-status', 'is-paid', 'is-consumed', 'has-replay-key'],
     nextAction: invoiceStatus === 'created' ? 'pay-invoice' : invoiceStatus === 'paid' ? 'consume-payment' : null,
     stateMachine: ['created', 'paid', 'consumed'],
+    replayKey,
+    paymentId: paymentRequest?.x402?.paymentId || paymentRequest?.stacks?.paymentId || null,
+    expiresAt: paymentRequest?.x402?.expiresAt || paymentRequest?.stacks?.expiresAt || null,
     paymentReceipt,
     updatedAt: new Date().toISOString()
   });
@@ -28,7 +32,7 @@ export async function readContractInvoiceState({ jobId, paymentRequest, paymentR
   const paid = inferredStatus === 'paid' || consumed;
 
   const state = {
-    source: 'adapter-simulated',
+    source: paymentReceipt?.verificationSource || 'backend-ledger',
     contractPrincipal: paymentRequest?.clarity?.contractPrincipal || paymentRequest?.stacks?.contract || null,
     jobId,
     stateMachine,
@@ -37,6 +41,10 @@ export async function readContractInvoiceState({ jobId, paymentRequest, paymentR
     consumed,
     readOnlyFns: ['get-invoice', 'get-invoice-status', 'is-paid', 'is-consumed', 'has-replay-key'],
     nextAction: consumed ? null : paid ? 'consume-payment' : 'pay-invoice',
+    replayKey: paymentRequest?.clarity?.replayKey || paymentRequest?.verificationPlan?.replayKey || null,
+    paymentId: paymentRequest?.x402?.paymentId || paymentRequest?.stacks?.paymentId || null,
+    expiresAt: paymentRequest?.x402?.expiresAt || paymentRequest?.stacks?.expiresAt || null,
+    paymentReceipt: paymentReceipt || null,
     updatedAt: new Date().toISOString()
   };
 

@@ -1,11 +1,11 @@
-;; AutoScholar Payments Contract (V7.4 scaffold)
-;; Clarity testnet-oriented invoice payment registry for x402 premium unlocks.
+;; AutoScholar Payments Contract (V8.0 protocol-aligned scaffold)
+;; Clarity testnet-oriented x402 payment registry for Stacks premium unlocks.
 
-(define-constant contract-owner tx-sender)
 (define-constant status-created u0)
 (define-constant status-paid u1)
 (define-constant status-consumed u2)
 
+(define-constant contract-owner tx-sender)
 (define-constant err-unauthorized (err u100))
 (define-constant err-invoice-exists (err u101))
 (define-constant err-invoice-not-found (err u102))
@@ -25,6 +25,7 @@
     amount: uint,
     asset: (string-ascii 32),
     memo: (string-ascii 128),
+    payment-id: (string-ascii 64),
     status: uint,
     paid-at-height: (optional uint),
     payment-ref: (optional (string-ascii 128))
@@ -42,6 +43,7 @@
   amount: uint,
   asset: (string-ascii 32),
   memo: (string-ascii 128),
+  payment-id: (string-ascii 64),
   status: uint,
   paid-at-height: (optional uint),
   payment-ref: (optional (string-ascii 128))
@@ -84,10 +86,12 @@
   (amount uint)
   (asset (string-ascii 32))
   (memo (string-ascii 128))
+  (payment-id (string-ascii 64))
 )
   (begin
     (asserts! (is-eq tx-sender contract-owner) err-unauthorized)
     (asserts! (> amount u0) err-invalid-amount)
+    (asserts! (is-eq asset "STX") err-invalid-asset)
     (asserts! (is-none (map-get? invoices { job-id: job-id })) err-invoice-exists)
     (map-set invoices
       { job-id: job-id }
@@ -97,6 +101,7 @@
         amount: amount,
         asset: asset,
         memo: memo,
+        payment-id: payment-id,
         status: status-created,
         paid-at-height: none,
         payment-ref: none
@@ -108,26 +113,54 @@
 
 (define-public (pay-invoice
   (job-id (string-ascii 64))
+  (recipient principal)
   (amount uint)
   (asset (string-ascii 32))
   (memo (string-ascii 128))
+  (payment-id (string-ascii 64))
 )
-  (match (map-get? invoices { job-id: job-id })
-    invoice
+(begin
+    (asserts! (> amount u0) err-invalid-amount)
+    (asserts! (is-eq asset "STX") err-invalid-asset)
+    (try! (stx-transfer? amount tx-sender recipient))
+    (match (map-get? invoices { job-id: job-id })
+      existing
+        (begin
+          (asserts! (not (invoice-status-eq existing status-paid)) err-already-paid)
+          (asserts! (not (invoice-status-eq existing status-consumed)) err-already-consumed)
+          (asserts! (invoice-status-eq existing status-created) err-invalid-status)
+          (asserts! (is-eq recipient (get recipient existing)) err-unauthorized)
+          (asserts! (is-eq amount (get amount existing)) err-invalid-amount)
+          (asserts! (is-eq asset (get asset existing)) err-invalid-asset)
+          (asserts! (is-eq memo (get memo existing)) err-invalid-memo)
+          (asserts! (is-eq payment-id (get payment-id existing)) err-replay-detected)
+          (map-set invoices
+            { job-id: job-id }
+            {
+              payer: (some tx-sender),
+              recipient: recipient,
+              amount: amount,
+              asset: asset,
+              memo: memo,
+              payment-id: payment-id,
+              status: status-paid,
+              paid-at-height: (some block-height),
+              payment-ref: (some memo)
+            }
+          )
+          (ok true)
+        )
       (begin
-        (asserts! (invoice-status-eq invoice status-created) err-invalid-status)
-        (asserts! (is-eq amount (get amount invoice)) err-invalid-amount)
-        (asserts! (is-eq asset (get asset invoice)) err-invalid-asset)
-        (asserts! (is-eq memo (get memo invoice)) err-invalid-memo)
         ;; NOTE: token transfer / post-condition enforcement is expected off-chain or in a later contract revision.
         (map-set invoices
           { job-id: job-id }
           {
             payer: (some tx-sender),
-            recipient: (get recipient invoice),
-            amount: (get amount invoice),
-            asset: (get asset invoice),
-            memo: (get memo invoice),
+            recipient: recipient,
+            amount: amount,
+            asset: asset,
+            memo: memo,
+            payment-id: payment-id,
             status: status-paid,
             paid-at-height: (some block-height),
             payment-ref: (some memo)
@@ -135,7 +168,7 @@
         )
         (ok true)
       )
-    err-invoice-not-found
+    )
   )
 )
 
@@ -147,6 +180,7 @@
     invoice
       (begin
         (asserts! (is-eq tx-sender contract-owner) err-unauthorized)
+        (asserts! (not (invoice-status-eq invoice status-consumed)) err-already-consumed)
         (asserts! (invoice-status-eq invoice status-paid) err-invalid-status)
         (asserts! (is-none (map-get? consumed-payments { replay-key: replay-key })) err-replay-detected)
         (map-set consumed-payments { replay-key: replay-key } { consumed: true })
@@ -158,6 +192,7 @@
             amount: (get amount invoice),
             asset: (get asset invoice),
             memo: (get memo invoice),
+            payment-id: (get payment-id invoice),
             status: status-consumed,
             paid-at-height: (get paid-at-height invoice),
             payment-ref: (get payment-ref invoice)
