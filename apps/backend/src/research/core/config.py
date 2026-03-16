@@ -12,6 +12,7 @@ class ResearchConfig:
     openai_model: str = "gpt-5.4"
     llm_timeout_seconds: int = 180
     llm_max_retries: int = 3
+    report_llm_enhancement_enabled: bool = False
     arxiv_max_results: int = 80
     openreview_max_results: int = 80
     evidence_limit: int = 48
@@ -28,6 +29,7 @@ class ResearchConfig:
             openai_model=os.getenv("OPENAI_MODEL", os.getenv("MODEL", "gpt-5.4")),
             llm_timeout_seconds=int(os.getenv("LLM_TIMEOUT_MS", "60000")) // 1000 or 60,
             llm_max_retries=max(1, int(os.getenv("LLM_MAX_RETRIES", "3"))),
+            report_llm_enhancement_enabled=os.getenv("REPORT_LLM_ENHANCEMENT", "false").strip().lower() in {"1", "true", "yes", "on"},
             arxiv_max_results=int(os.getenv("ARXIV_MAX_RESULTS", "80")),
             openreview_max_results=int(os.getenv("OPENREVIEW_MAX_RESULTS", "80")),
             evidence_limit=int(os.getenv("EVIDENCE_LIMIT", "48")),

@@ -1,29 +1,103 @@
 # Architecture
 
-## Current MVP Architecture
+AutoScholar is built as a research workflow with a separate payment and entitlement layer. The research topic drives retrieval and synthesis, while x402 plus Stacks controls premium access and settlement.
 
-AutoScholar currently uses a hybrid implementation where research content and payment rail are intentionally separated: the user topic drives retrieval and debate, while x402 + Stacks powers premium unlock and settlement semantics. In V7.2, the payment model is elevated into a Clarity-contract path scaffold, with explicit contract principal, public function, expected args, post-conditions, replay protection key, and contract-oriented verification steps.
+## System Overview
 
-- **Frontend**: React + Vite dashboard
-- **Backend**: Express manager service
-- **Evidence discovery**: mixed retrieval (local x402/Stacks knowledge base + arXiv API)
-- **LLM summarization**: TuZi OpenAI-compatible endpoint via Python helper
-- **Payment**: simulated x402 / Stacks-style payment receipt
+- frontend: React + Vite dashboard
+- backend: Express manager service
+- research pipeline: Python retrieval and synthesis workflow
+- settlement rail: Stacks testnet contract-call path
+- verification source: Hiro API
 
-## Why a Python helper exists
+## Request Lifecycle
 
-The TuZi provider works with direct HTTP calls when proxy variables are removed. The local Node runtime path showed compatibility issues during integration, so the current MVP uses a small Python helper that:
+1. A requester submits a topic.
+2. The backend creates a job and derives a research profile.
+3. The research pipeline stages pre-payment evidence from supported sources.
+4. The backend returns:
+   - job metadata
+   - x402 challenge metadata
+   - parent invoice metadata
+   - service manifest
+   - task tree
+   - commerce trace
+5. After payment, the frontend signs a Stacks contract call.
+6. The backend verifies the transaction against expected contract, function, args, and x402 authorization.
+7. Verified payment unlocks the specialist bundle and report packaging.
+8. The final response includes markdown plus machine-readable outputs.
 
-- strips proxy-related environment variables
-- sends the OpenAI-compatible request directly
-- returns normalized JSON to the backend
+## Research Layer
 
-This keeps the hackathon demo moving while preserving the intended user flow.
+The current pipeline combines:
 
-## Planned evolution
+- `arXiv` papers
+- `OpenReview` papers
+- local topic frameworks
+- local protocol notes where relevant
 
-1. replace the helper with a native Node adapter once provider compatibility is stabilized
-2. split specialist molbots into separate services
-3. move from simulated payment receipts to Stacks testnet transaction verification
-4. add true diagram extraction from PDF sources
-5. expand x402 / Stacks local knowledge base into first-class protocol documentation retrieval
+This means the research layer is broader than a single search API. It is a topic-aware evidence pipeline with synthesis and report generation.
+
+## Payment Layer
+
+The payment layer is modeled as a parent invoice:
+
+- the backend quotes the specialist bundle
+- the frontend requests wallet approval
+- the payer signs `pay-invoice`
+- Hiro is polled until the transaction reaches success
+- the backend validates settlement semantics before releasing paid outputs
+
+The current live path is `STX-first`. sBTC and USDCx belong to the roadmap and product narrative, not the fully implemented on-chain transfer path in this repository.
+
+## Task Tree And Commerce Trace
+
+Two objects are central to the product story:
+
+- `taskTree`
+  - explains which specialists are involved
+  - shows the parent and child work items
+  - makes delegation visible to judges and users
+- `commerceTrace`
+  - explains quote creation, payment expectation, verification, and delivery
+  - makes the x402 and settlement lifecycle legible
+
+These objects are useful both for the UI and for downstream agents.
+
+## Output Model
+
+The final output bundle is intentionally mixed-format:
+
+- markdown for humans
+- JSON packets for agents
+
+Current output artifacts include:
+
+- `Research Dossier`
+- `Research Brief`
+- `Evidence Pack`
+- `Citation Ledger`
+- `Agent Handoff Packet`
+
+## Why The Python Pipeline Exists
+
+The current research workflow is implemented in Python because retrieval, synthesis, debate, and report generation are grouped there today. The Node backend acts as the manager and payment-facing orchestration layer.
+
+This is a practical split for the current stage of the project:
+
+- Node owns HTTP, wallet-facing flow, and settlement verification
+- Python owns evidence retrieval and research synthesis
+
+## Known Boundaries
+
+- specialists are still bundled inside one product experience rather than fully separated network services
+- there is no registry or reputation layer yet
+- payment verification is real on testnet, but the broader molbot economy is still represented through protocol objects and workflow structure
+
+## Evolution Path
+
+1. split specialist capabilities into separately deployable services
+2. expose a cleaner agent-facing API for paid invocation
+3. add non-STX settlement rails
+4. add registry and discovery for specialized molbots
+5. add persistence, observability, and production hardening

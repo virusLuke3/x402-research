@@ -415,12 +415,508 @@ function buildEvidenceTable(items) {
 
 function buildPaymentFlow() {
   return [
-    'User submits an arbitrary research question.',
-    'Manager agent retrieves topic evidence and prepares the committee meeting.',
-    'Backend returns an x402 payment challenge carrying Stacks settlement details.',
-    'User pays through a Stacks settlement path (USDCx / sBTC / STX-compatible narrative depending on configuration).',
-    'Backend verifies the Stacks payment proof / txid and unlocks specialist outputs after verification.'
+    'Requester or upstream molbot submits a research task.',
+    'Manager Molbot retrieves evidence, scopes the work, and prepares a specialist bundle.',
+    'Backend returns an x402 challenge carrying the parent invoice and Stacks settlement details.',
+    'Requester pays the parent invoice through the configured Stacks settlement path.',
+    'Backend verifies settlement, releases paid specialist tasks, and packages human-readable plus machine-readable outputs.'
   ];
+}
+
+function formatAssetDisplay(asset, amount) {
+  if (asset === 'STX') {
+    const value = Number(amount || 0) / 1_000_000;
+    return `${value.toFixed(6).replace(/\.?0+$/, '')} STX`;
+  }
+  return `${amount} ${asset}`;
+}
+
+function distributeQuotedAmounts(totalAmount, count) {
+  const total = Number.parseInt(String(totalAmount || 0), 10);
+  if (!Number.isFinite(total) || total <= 0 || count <= 0) {
+    return Array.from({ length: Math.max(count, 0) }, () => 0);
+  }
+  const base = Math.floor(total / count);
+  const remainder = total - base * count;
+  return Array.from({ length: count }, (_value, index) => (index < remainder ? base + 1 : base));
+}
+
+function buildServiceManifest(job) {
+  const asset = job?.paymentRequest?.asset || 'STX';
+  const amount = job?.paymentRequest?.amount || '0';
+  const displayAmount = formatAssetDisplay(asset, amount);
+  const status = job?.paymentReceipt ? 'ready' : job?.status === 'processing' ? 'preparing' : 'quoted';
+
+  return [
+    {
+      id: 'research-dossier',
+      title: 'Research Dossier',
+      format: 'markdown',
+      audience: 'human + agent',
+      status,
+      price: displayAmount,
+      settlement: 'bundled-under-parent-invoice',
+      description: 'Long-form premium dossier with synthesis, implications, and implementation guidance.'
+    },
+    {
+      id: 'evidence-pack',
+      title: 'Evidence Pack',
+      format: 'json',
+      audience: 'agent',
+      status,
+      price: displayAmount,
+      settlement: 'bundled-under-parent-invoice',
+      description: 'Machine-readable evidence shortlist for downstream molbots.'
+    },
+    {
+      id: 'citation-ledger',
+      title: 'Citation Ledger',
+      format: 'json',
+      audience: 'agent',
+      status,
+      price: displayAmount,
+      settlement: 'bundled-under-parent-invoice',
+      description: 'Structured citation and payment-rail reference bundle.'
+    },
+    {
+      id: 'agent-handoff',
+      title: 'Agent Handoff Packet',
+      format: 'json',
+      audience: 'agent',
+      status,
+      price: displayAmount,
+      settlement: 'bundled-under-parent-invoice',
+      description: 'Compact task outcome packet for other agents to continue work without re-running retrieval.'
+    }
+  ];
+}
+
+function buildTaskTree(job, stage = 'quote-issued', llmResult = null, extractedAssets = []) {
+  const asset = job?.paymentRequest?.asset || 'STX';
+  const amount = job?.paymentRequest?.amount || '0';
+  const specialists = safeArray(job?.topicProfile?.specialistRoles, []);
+  const bundledCount = specialists.length + 3;
+  const quotes = distributeQuotedAmounts(amount, bundledCount);
+  let quoteIndex = 0;
+
+  const nextQuote = () => {
+    const quotedAmount = quotes[quoteIndex] || 0;
+    quoteIndex += 1;
+    return {
+      amount: String(quotedAmount),
+      asset,
+      displayAmount: formatAssetDisplay(asset, quotedAmount),
+      settlement: 'bundled-under-parent-invoice'
+    };
+  };
+
+  const statuses = {
+    'quote-issued': {
+      root: 'awaiting-payment',
+      evidence: 'completed',
+      gateway: 'awaiting-payment',
+      specialist: 'locked',
+      packaging: 'locked'
+    },
+    processing: {
+      root: 'processing',
+      evidence: 'completed',
+      gateway: 'paid',
+      specialist: 'processing',
+      packaging: 'processing'
+    },
+    completed: {
+      root: 'completed',
+      evidence: 'completed',
+      gateway: 'paid',
+      specialist: 'completed',
+      packaging: 'completed'
+    },
+    'completed-with-fallback': {
+      root: 'completed_with_fallback',
+      evidence: 'completed',
+      gateway: 'paid',
+      specialist: 'completed',
+      packaging: 'completed_with_fallback'
+    }
+  }[stage] || {
+    root: 'awaiting-payment',
+    evidence: 'completed',
+    gateway: 'awaiting-payment',
+    specialist: 'locked',
+    packaging: 'locked'
+  };
+
+  const parliamentByAgent = new Map(
+    safeArray(llmResult?.parliament, []).map((item) => [item.agent, item])
+  );
+
+  const nodes = [
+    {
+      id: 'manager-router',
+      parentId: null,
+      depth: 0,
+      label: 'Manager Router',
+      agent: 'Manager Molbot',
+      role: 'Scope the task, prepare the quote, and orchestrate specialist work.',
+      status: statuses.root,
+      pricing: null,
+      unlockCondition: 'always-on',
+      resultSummary: 'Creates the parent invoice and chooses which paid specialist services to unlock.'
+    },
+    {
+      id: 'evidence-scout',
+      parentId: 'manager-router',
+      depth: 1,
+      label: 'Evidence Scout',
+      agent: 'Evidence Scout Molbot',
+      role: 'Retrieval across topic evidence and payment-rail references.',
+      status: statuses.evidence,
+      pricing: null,
+      unlockCondition: 'free pre-quote preparation',
+      resultSummary: `${safeArray(job?.papers, []).length} evidence sources prepared before payment.`
+    },
+    {
+      id: 'x402-gateway',
+      parentId: 'manager-router',
+      depth: 1,
+      label: 'x402 Gateway',
+      agent: 'x402 Settlement Gateway',
+      role: 'Issue parent invoice, bind authorization, and release specialist capabilities after verified payment.',
+      status: statuses.gateway,
+      pricing: {
+        amount: String(amount),
+        asset,
+        displayAmount: formatAssetDisplay(asset, amount),
+        settlement: 'parent-invoice'
+      },
+      unlockCondition: 'requires verified parent invoice',
+      resultSummary: job?.paymentReceipt
+        ? `Verified settlement ${job.paymentReceipt.txid || ''}`.trim()
+        : 'Specialist services remain locked until payment is verified.'
+    }
+  ];
+
+  const specialistNodes = specialists.map((roleSpec, index) => {
+    const panelSummary = parliamentByAgent.get(roleSpec.agent)?.stance || `Unlock ${roleSpec.role.toLowerCase()} after settlement.`;
+    return {
+      id: `panel-${index + 1}`,
+      parentId: 'x402-gateway',
+      depth: 2,
+      label: roleSpec.agent,
+      agent: roleSpec.agent,
+      role: roleSpec.role,
+      status: statuses.specialist,
+      pricing: nextQuote(),
+      unlockCondition: 'released after parent invoice payment',
+      resultSummary: truncate(panelSummary, 180)
+    };
+  });
+
+  nodes.push(
+    ...specialistNodes,
+    {
+      id: 'citation-auditor',
+      parentId: 'x402-gateway',
+      depth: 2,
+      label: 'Citation Auditor',
+      agent: 'Citation Auditor Molbot',
+      role: 'Normalize references into an agent-consumable citation ledger.',
+      status: statuses.specialist,
+      pricing: nextQuote(),
+      unlockCondition: 'released after parent invoice payment',
+      resultSummary: llmResult
+        ? `${safeArray(job?.report?.citations, []).length || safeArray(job?.papers, []).length} citations prepared for downstream agents.`
+        : 'Will produce a machine-readable citation ledger after payment.'
+    },
+    {
+      id: 'figure-extractor',
+      parentId: 'x402-gateway',
+      depth: 2,
+      label: 'Figure Extractor',
+      agent: 'Figure Extractor Molbot',
+      role: 'Package diagram, chart, and supporting visual asset metadata.',
+      status: statuses.specialist,
+      pricing: nextQuote(),
+      unlockCondition: 'released after parent invoice payment',
+      resultSummary: extractedAssets?.length
+        ? `${extractedAssets.length} premium asset records prepared.`
+        : 'Reserved slot for premium visual assets and structured attachments.'
+    },
+    {
+      id: 'deliverable-packer',
+      parentId: 'x402-gateway',
+      depth: 3,
+      label: 'Deliverable Packer',
+      agent: 'Delivery Packager Molbot',
+      role: 'Bundle markdown dossier, evidence pack, and agent handoff packet.',
+      status: statuses.packaging,
+      pricing: nextQuote(),
+      unlockCondition: 'runs after specialist outputs are released',
+      resultSummary: llmResult
+        ? 'Packages markdown + JSON outputs for both humans and downstream molbots.'
+        : 'Queued until settlement and specialist execution complete.'
+    }
+  );
+
+  const edges = nodes
+    .filter((node) => node.parentId)
+    .map((node) => ({ from: node.parentId, to: node.id }));
+
+  const statusCounts = nodes.reduce((accumulator, node) => {
+    accumulator[node.status] = (accumulator[node.status] || 0) + 1;
+    return accumulator;
+  }, {});
+
+  return {
+    rootId: 'manager-router',
+    stage,
+    summary: {
+      totalNodes: nodes.length,
+      specialistNodes: specialistNodes.length + 3,
+      paidNodes: nodes.filter((node) => node.pricing?.amount && Number(node.pricing.amount) > 0).length,
+      statusCounts
+    },
+    nodes,
+    edges
+  };
+}
+
+function buildCommerceTrace(job, stage = 'quote-issued', llmResult = null, extractedAssets = []) {
+  const asset = job?.paymentRequest?.asset || 'STX';
+  const amount = job?.paymentRequest?.amount || '0';
+  const displayAmount = formatAssetDisplay(asset, amount);
+  const events = [
+    {
+      id: 'trace-intake',
+      title: 'Task scoped by manager molbot',
+      detail: `Topic received and profiled as ${job?.topicProfile?.label || 'general research'}.`,
+      actor: 'Manager Molbot',
+      category: 'planning',
+      status: 'completed',
+      timestamp: job?.createdAt
+    },
+    {
+      id: 'trace-evidence',
+      title: 'Evidence pack prepared before payment',
+      detail: `${safeArray(job?.papers, []).length} topic evidence items prepared for premium routing.`,
+      actor: 'Evidence Scout Molbot',
+      category: 'retrieval',
+      status: 'completed',
+      timestamp: job?.createdAt
+    },
+    {
+      id: 'trace-quote',
+      title: 'x402 parent invoice issued',
+      detail: `Parent invoice ${job?.paymentRequest?.x402?.paymentId || 'pending'} quotes ${displayAmount} for the specialist bundle.`,
+      actor: 'x402 Settlement Gateway',
+      category: 'quote',
+      status: stage === 'quote-issued' ? 'awaiting-payment' : 'completed',
+      timestamp: job?.createdAt,
+      amountDisplay: displayAmount
+    }
+  ];
+
+  if (stage !== 'quote-issued') {
+    events.push(
+      {
+        id: 'trace-payment',
+        title: 'Stacks payment verified',
+        detail: `Settlement verified against ${job?.paymentReceipt?.verificationTarget || 'Stacks payment path'}.`,
+        actor: 'Verification Backend',
+        category: 'settlement',
+        status: 'completed',
+        timestamp: job?.paidAt || new Date().toISOString(),
+        amountDisplay: displayAmount,
+        txid: job?.paymentReceipt?.txid || null
+      },
+      {
+        id: 'trace-release',
+        title: 'Paid specialist capabilities released',
+        detail: `Unlocked ${safeArray(job?.topicProfile?.specialistRoles, []).length + 3} paid subtasks under the parent invoice.`,
+        actor: 'Manager Molbot',
+        category: 'execution',
+        status: stage === 'processing' ? 'processing' : 'completed',
+        timestamp: job?.paidAt || new Date().toISOString()
+      }
+    );
+  }
+
+  if (stage === 'completed' || stage === 'completed-with-fallback') {
+    events.push(
+      {
+        id: 'trace-synthesis',
+        title: stage === 'completed-with-fallback' ? 'Fallback synthesis used' : 'Premium synthesis concluded',
+        detail: stage === 'completed-with-fallback'
+          ? 'The payment path succeeded, and delivery completed using a degraded synthesis fallback.'
+          : llmResult?.executiveSummary || 'Specialist synthesis completed and merged into the final dossier.',
+        actor: 'Delivery Packager Molbot',
+        category: 'synthesis',
+        status: stage === 'completed-with-fallback' ? 'completed_with_fallback' : 'completed',
+        timestamp: job?.paidAt || new Date().toISOString()
+      },
+      {
+        id: 'trace-delivery',
+        title: 'Human + machine deliverables packaged',
+        detail: `${extractedAssets.length} asset records plus markdown and JSON handoff outputs are ready.`,
+        actor: 'Agent Handoff Packager',
+        category: 'delivery',
+        status: stage === 'completed-with-fallback' ? 'completed_with_fallback' : 'completed',
+        timestamp: job?.paidAt || new Date().toISOString()
+      }
+    );
+  }
+
+  return {
+    stage,
+    summary: {
+      totalEvents: events.length,
+      paymentVerified: Boolean(job?.paymentReceipt),
+      txid: job?.paymentReceipt?.txid || null
+    },
+    events
+  };
+}
+
+function buildOutputManifest(job, evidenceBundle = null, report = null, taskTree = null, commerceTrace = null) {
+  const lockedStatus = job?.status === 'processing' ? 'preparing' : 'locked';
+
+  if (!report) {
+    return {
+      status: lockedStatus,
+      items: [
+        {
+          id: 'research-dossier',
+          title: 'Research Dossier',
+          format: 'markdown',
+          audience: 'human + agent',
+          status: lockedStatus,
+          description: 'Premium markdown dossier unlocks after the parent invoice is paid.'
+        },
+        {
+          id: 'evidence-pack',
+          title: 'Evidence Pack',
+          format: 'json',
+          audience: 'agent',
+          status: lockedStatus,
+          description: 'Structured evidence shortlist for downstream agents.'
+        },
+        {
+          id: 'agent-handoff',
+          title: 'Agent Handoff Packet',
+          format: 'json',
+          audience: 'agent',
+          status: lockedStatus,
+          description: 'Machine-readable summary of what was done, what was paid for, and what should happen next.'
+        }
+      ]
+    };
+  }
+
+  const researchBrief = {
+    title: report.title,
+    topic: job.topic,
+    researchMode: job.researchMode,
+    executiveSummary: report.executiveSummary,
+    keyFindings: report.keyFindings,
+    implications: report.implications,
+    consensus: report.consensus,
+    nextResearchActions: report.nextResearchActions,
+    quality: report.quality
+  };
+
+  const evidencePack = {
+    query: evidenceBundle?.query || job.searchQuery,
+    topicEvidence: report.evidenceTable,
+    paymentEvidence: report.paymentEvidenceTable,
+    extractedAssets: report.extractedAssets
+  };
+
+  const citationLedger = {
+    citations: report.citations,
+    paymentCitations: report.paymentCitations
+  };
+
+  const agentHandoff = {
+    topic: job.topic,
+    payment: {
+      paymentId: job?.paymentRequest?.x402?.paymentId || null,
+      asset: job?.paymentRequest?.asset || null,
+      amount: job?.paymentRequest?.amount || null,
+      txid: job?.paymentReceipt?.txid || null,
+      verificationMode: job?.paymentReceipt?.mode || null
+    },
+    deliverables: safeArray(job?.serviceManifest, []).map((service) => ({
+      id: service.id,
+      title: service.title,
+      format: service.format,
+      audience: service.audience
+    })),
+    taskTreeDigest: safeArray(taskTree?.nodes, []).map((node) => ({
+      id: node.id,
+      label: node.label,
+      agent: node.agent,
+      status: node.status,
+      price: node.pricing?.displayAmount || 'bundled'
+    })),
+    traceDigest: safeArray(commerceTrace?.events, []).map((event) => ({
+      id: event.id,
+      title: event.title,
+      category: event.category,
+      status: event.status
+    }))
+  };
+
+  return {
+    status: 'ready',
+    items: [
+      {
+        id: 'research-dossier',
+        title: 'Research Dossier',
+        format: 'markdown',
+        audience: 'human + agent',
+        status: 'ready',
+        description: 'Primary long-form deliverable.',
+        preview: report.markdown
+      },
+      {
+        id: 'research-brief',
+        title: 'Research Brief',
+        format: 'json',
+        audience: 'agent',
+        status: 'ready',
+        description: 'Compact thesis and recommendation packet.',
+        payload: researchBrief
+      },
+      {
+        id: 'evidence-pack',
+        title: 'Evidence Pack',
+        format: 'json',
+        audience: 'agent',
+        status: 'ready',
+        description: 'Evidence shortlist and premium asset inventory.',
+        payload: evidencePack
+      },
+      {
+        id: 'citation-ledger',
+        title: 'Citation Ledger',
+        format: 'json',
+        audience: 'agent',
+        status: 'ready',
+        description: 'Structured citations ready for downstream use.',
+        payload: citationLedger
+      },
+      {
+        id: 'agent-handoff',
+        title: 'Agent Handoff Packet',
+        format: 'json',
+        audience: 'agent',
+        status: 'ready',
+        description: 'Task, payment, and execution digest for downstream molbots.',
+        payload: agentHandoff
+      }
+    ]
+  };
 }
 
 function buildCitationUrl(item) {
@@ -1161,7 +1657,7 @@ async function generateReport(topic, researchMode, topicProfile, evidenceBundle)
   return callResearchBridge('report', { topic, researchMode, topicProfile, evidenceBundle });
 }
 
-function buildResearchReport(topic, researchMode, topicProfile, evidenceBundle, llmResult, extractedAssets, contractState = null) {
+function buildResearchReport(topic, researchMode, topicProfile, evidenceBundle, llmResult, extractedAssets, contractState = null, extras = {}) {
   const citations = buildCitationRecords(evidenceBundle.topicEvidence);
   const paymentCitations = buildCitationRecords(evidenceBundle.paymentEvidence, 'P');
 
@@ -1197,6 +1693,10 @@ function buildResearchReport(topic, researchMode, topicProfile, evidenceBundle, 
     },
     paymentFlow: buildPaymentFlow(),
     extractedAssets,
+    serviceManifest: extras.serviceManifest || [],
+    taskTree: extras.taskTree || null,
+    commerceTrace: extras.commerceTrace || null,
+    outputs: extras.outputManifest || null,
     citations,
     paymentCitations,
     markdown: llmResult.markdown || buildFallbackMarkdownReport(topic, researchMode, topicProfile, evidenceBundle, llmResult, citations)
@@ -1296,6 +1796,11 @@ app.post('/api/research', async (req, res) => {
       extractedAssets: [],
       report: null
     };
+
+    job.serviceManifest = buildServiceManifest(job);
+    job.taskTree = buildTaskTree(job, 'quote-issued');
+    job.commerceTrace = buildCommerceTrace(job, 'quote-issued');
+    job.outputs = buildOutputManifest(job);
 
     seedContractInvoiceState({
       jobId: id,
@@ -1491,6 +1996,10 @@ app.post('/api/jobs/:id/pay', async (req, res) => {
 
     job.status = 'processing';
     job.orchestration.meetingStatus = 'in-progress';
+    job.serviceManifest = buildServiceManifest(job);
+    job.taskTree = buildTaskTree(job, 'processing');
+    job.commerceTrace = buildCommerceTrace(job, 'processing');
+    job.outputs = buildOutputManifest(job);
     jobs.set(job.id, job);
 
     const evidenceBundle = {
@@ -1536,7 +2045,25 @@ app.post('/api/jobs/:id/pay', async (req, res) => {
       providerApiStyle: OPENAI_API_STYLE,
       error: llmResult.error || null
     };
-    job.report = buildResearchReport(job.topic, job.researchMode, job.topicProfile, evidenceBundle, llmResult, extractedAssets, job.contractState);
+    job.serviceManifest = buildServiceManifest(job);
+    job.taskTree = buildTaskTree(job, usedFallback ? 'completed-with-fallback' : 'completed', llmResult, extractedAssets);
+    job.commerceTrace = buildCommerceTrace(job, usedFallback ? 'completed-with-fallback' : 'completed', llmResult, extractedAssets);
+    job.report = buildResearchReport(
+      job.topic,
+      job.researchMode,
+      job.topicProfile,
+      evidenceBundle,
+      llmResult,
+      extractedAssets,
+      job.contractState,
+      {
+        serviceManifest: job.serviceManifest,
+        taskTree: job.taskTree,
+        commerceTrace: job.commerceTrace
+      }
+    );
+    job.outputs = buildOutputManifest(job, evidenceBundle, job.report, job.taskTree, job.commerceTrace);
+    job.report.outputs = job.outputs;
 
     jobs.set(job.id, job);
     logInfo('payment.complete', {

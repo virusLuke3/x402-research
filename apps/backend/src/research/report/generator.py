@@ -17,13 +17,13 @@ class ReportGenerator:
         citations = self._build_citations(evidence_bundle.get("topicEvidence", []))
         source_summary = self._build_source_summary(evidence_bundle.get("topicEvidence", []))
         paper_count = sum(1 for item in evidence_bundle.get("topicEvidence", []) if item.get("sourceType") in {"arxiv", "openreview"})
-        markdown = self._generate_markdown(topic, research_mode, topic_profile, evidence_bundle, parliament_result, citations)
+        markdown, synthesis_mode = self._generate_markdown(topic, research_mode, topic_profile, evidence_bundle, parliament_result, citations)
         return {
             **parliament_result,
             "mode": "python-report-generator",
             "quality": {
                 "evidenceCoverage": len(evidence_bundle.get("topicEvidence", [])),
-                "synthesisMode": "python-report-generator",
+                "synthesisMode": synthesis_mode,
                 "confidence": "high" if paper_count >= self.config.minimum_paper_count else "medium-high" if paper_count >= 20 else "medium",
                 "evidenceStats": self._build_evidence_stats(evidence_bundle.get("topicEvidence", [])),
                 "sourceSummary": source_summary,
@@ -34,7 +34,11 @@ class ReportGenerator:
             "markdown": markdown,
         }
 
-    def _generate_markdown(self, topic: str, research_mode: str, topic_profile: dict, evidence_bundle: dict, parliament_result: dict, citations: list[dict]) -> str:
+    def _generate_markdown(self, topic: str, research_mode: str, topic_profile: dict, evidence_bundle: dict, parliament_result: dict, citations: list[dict]) -> tuple[str, str]:
+        deterministic_markdown = self._build_stable_markdown(topic, topic_profile, evidence_bundle, parliament_result, citations)
+        if not self.config.report_llm_enhancement_enabled:
+            return deterministic_markdown, "python-deterministic-report"
+
         payload = {
             "topic": topic,
             "researchMode": research_mode,
@@ -60,12 +64,65 @@ class ReportGenerator:
             {"role": "user", "content": json.dumps(payload, ensure_ascii=False, indent=2)},
         ]
 
-        fallback = self._build_fallback_markdown(topic, topic_profile, parliament_result, citations)
         try:
             content = self.client.call(messages=messages, temperature=0.2, model=self.model)
-            return content.strip() if isinstance(content, str) and content.strip() else fallback
+            if isinstance(content, str) and content.strip():
+                return content.strip(), "python-llm-enhanced-report"
+            return deterministic_markdown, "python-deterministic-report"
         except Exception:
-            return fallback
+            return deterministic_markdown, "python-deterministic-report"
+
+    def _build_stable_markdown(self, topic: str, topic_profile: dict, evidence_bundle: dict, parliament_result: dict, citations: list[dict]) -> str:
+        source_summary = self._build_source_summary(evidence_bundle.get("topicEvidence", []))
+        evidence_stats = self._build_evidence_stats(evidence_bundle.get("topicEvidence", []))
+        executive_summary = self._flatten_text(parliament_result.get("executiveSummary")) or f"围绕 {topic} 的文献已完成结构化综合。"
+        methodology = self._flatten_text(parliament_result.get("methodology")) or f"围绕 {topic_profile.get('label', '当前主题')} 检索并筛选 arXiv + OpenReview 多源证据。"
+        consensus = self._flatten_text(parliament_result.get("consensus")) or "当前证据已形成有限共识，但仍应保留边界意识。"
+        key_findings = self._normalize_bullets(parliament_result.get("keyFindings"))
+        implications = self._normalize_bullets(parliament_result.get("implications"))
+        limitations = self._normalize_bullets(parliament_result.get("limitations"))
+        next_actions = self._normalize_bullets(parliament_result.get("nextResearchActions"))
+        parliament_notes = self._normalize_parliament(parliament_result.get("parliament"))
+        paper_count = sum(1 for item in evidence_bundle.get("topicEvidence", []) if item.get("sourceType") in {"arxiv", "openreview"})
+
+        sections = [
+            f"# 研究报告：{topic}",
+            "",
+            "## 1. 执行摘要",
+            executive_summary,
+            "",
+            "## 2. 研究范围与方法",
+            methodology,
+            "",
+            "## 3. 证据概览",
+            f"- 论文证据数量：{paper_count}",
+            f"- 报告门槛：至少 {self.config.minimum_paper_count} 篇论文",
+            f"- arXiv：{source_summary.get('arxiv', 0)}",
+            f"- OpenReview：{source_summary.get('openreview', 0)}",
+            f"- topic-core：{evidence_stats.get('topic-core', 0)}",
+            f"- supporting：{evidence_stats.get('supporting', 0)}",
+            "",
+            "## 4. 核心发现",
+        ]
+        sections.extend(f"- {item}" for item in key_findings or ["当前自动综合未提炼出稳定的核心发现。"])
+        sections.extend(["", "## 5. 影响与启示"])
+        sections.extend(f"- {item}" for item in implications or ["当前更适合把本报告视为研究线索地图，而不是最终定论。"])
+        sections.extend(["", "## 6. 当前共识"])
+        sections.append(consensus)
+        sections.extend(["", "## 7. 局限性"])
+        sections.extend(f"- {item}" for item in limitations or ["当前结论主要依赖标题、摘要和结构化 agent 输出，仍需更细粒度全文审查。"])
+        sections.extend(["", "## 8. 后续研究方向"])
+        sections.extend(f"- {item}" for item in next_actions or ["补充全文下载与细粒度证据聚类。"])
+        if parliament_notes:
+            sections.extend(["", "## 9. Agent 协同摘要"])
+            sections.extend(f"- {item}" for item in parliament_notes)
+        sections.extend(["", "## 10. 参考文献"])
+        sections.extend(
+            f"{idx + 1}. [{item['title']}]({item['url']}) — {item['published']}"
+            for idx, item in enumerate(citations[: self.config.report_citation_limit])
+            if item.get("url")
+        )
+        return "\n".join(sections)
 
     def _build_fallback_markdown(self, topic: str, topic_profile: dict, parliament_result: dict, citations: list[dict]) -> str:
         executive_summary = self._flatten_text(parliament_result.get("executiveSummary"))
@@ -107,11 +164,14 @@ class ReportGenerator:
             return "；".join(part for part in parts if part)
         if isinstance(value, dict):
             preferred = [
+                value.get("point"),
                 value.get("summary"),
+                value.get("boundary"),
                 value.get("finding"),
                 value.get("title"),
                 value.get("consensus"),
                 value.get("text"),
+                value.get("message"),
             ]
             chosen = next((self._flatten_text(item) for item in preferred if item), "")
             return chosen or json.dumps(value, ensure_ascii=False)
@@ -129,6 +189,26 @@ class ReportGenerator:
             if text:
                 bullets.append(text)
         return bullets
+
+    def _normalize_parliament(self, value) -> list[str]:
+        notes = []
+        if not isinstance(value, list):
+            return notes
+        for item in value:
+            if isinstance(item, dict):
+                agent = self._flatten_text(item.get("agent"))
+                role = self._flatten_text(item.get("role"))
+                stance = self._flatten_text(item.get("stance"))
+                prefix = " / ".join(part for part in [agent, role] if part)
+                if prefix and stance:
+                    notes.append(f"{prefix}: {stance}")
+                elif stance:
+                    notes.append(stance)
+            else:
+                text = self._flatten_text(item)
+                if text:
+                    notes.append(text)
+        return notes
 
     def _build_citations(self, items: list[dict]) -> list[dict]:
         citations = []

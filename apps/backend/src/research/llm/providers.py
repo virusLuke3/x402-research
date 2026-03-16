@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from http.client import IncompleteRead
 import json
 import socket
 import ssl
@@ -89,11 +90,11 @@ def should_retry_http(exc: error.HTTPError) -> bool:
 
 
 def should_retry_network(exc: Exception) -> bool:
-    if isinstance(exc, (TimeoutError, socket.timeout)):
+    if isinstance(exc, (TimeoutError, socket.timeout, IncompleteRead)):
         return True
 
     reason = getattr(exc, "reason", None)
-    if isinstance(reason, (TimeoutError, socket.timeout)):
+    if isinstance(reason, (TimeoutError, socket.timeout, IncompleteRead)):
         return True
 
     text = f"{type(exc).__name__}: {exc}"
@@ -164,7 +165,7 @@ def call_openai_format(messages: list[dict], temperature: float = 0.1, model: st
             last_error = RuntimeError(raw or f"HTTP {exc.code}")
             if attempt >= config.llm_max_retries or not should_retry_http(exc):
                 raise last_error from exc
-        except (error.URLError, OSError, TimeoutError, socket.timeout) as exc:
+        except (error.URLError, OSError, TimeoutError, socket.timeout, IncompleteRead) as exc:
             last_error = exc
             if attempt >= config.llm_max_retries or not should_retry_network(exc):
                 raise

@@ -1,13 +1,20 @@
-# Clarinet Test Notes
+# Test Notes
 
-These tests validate the AutoScholar Clarity payment contract in two layers:
+The current test layer focuses on protecting the payment contract surface and the expected verification model.
 
-1. `clarinet check` validates Clarity syntax and analysis.
-2. `vitest` validates that the contract source still exposes the expected state machine, replay protection, and public/read-only entry points.
+## What Runs
 
-## Current status
-In the current environment:
-- `clarinet check` runs successfully
-- `vitest run tests/autoscholar-payments.test.ts` runs successfully
+`npm test` executes:
 
-This is not yet full transaction-level Clarinet SDK simulation, but it is now executable and guards the contract surface from silent regressions.
+1. `clarinet check` for Clarity syntax and static analysis
+2. `vitest run tests/autoscholar-payments.test.ts` for contract-surface assertions
+
+## What These Tests Protect
+
+- expected public and read-only entry points
+- invoice lifecycle assumptions
+- replay-protection and payment-state expectations
+
+## Current Boundary
+
+This is not yet a full transaction-by-transaction Clarinet SDK simulation suite. It is a lightweight but useful safety layer that catches silent regressions in the contract interface and payment model.

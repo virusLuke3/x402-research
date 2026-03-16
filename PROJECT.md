@@ -1,44 +1,55 @@
-# Project Management
+# Project Status
+
+This file tracks the current shape of AutoScholar as a working hackathon project.
 
 ## Goal
-Build a hackathon-ready MVP for AutoScholar based on GUIDE.md, where arbitrary research topics are handled by a topic-aware deep research / AI Parliament workflow, while x402 protocol design and a Clarity-contract-oriented Stacks testnet payment path serve as the premium payment-unlock layer.
 
-## Current MVP Scope
-- [x] Create repo guide and project framing
-- [x] Scaffold backend service
-- [x] Scaffold frontend UI
-- [x] Implement x402-style 402 payment challenge flow
-- [x] Implement demo manager job lifecycle
-- [x] Produce local development instructions
-- [ ] Replace mock payment with real Stacks settlement
-- [ ] Add real specialist PDF / diagram extraction
-- [ ] Add persistent storage
-- [ ] Add wallet / funding UX
-- [ ] Add demo video assets and screenshots
-- [x] Replace unstable Python TuZi adapter with backend-native fetch integration
+Ship a convincing specialized-skill molbot that:
 
-## Milestones
+- accepts arbitrary research tasks
+- packages them as a quoted workflow
+- settles premium access through x402 on Stacks
+- returns outputs that another agent can reuse
 
-### Milestone 1 — Architecture & docs
-Completed.
+## Current Scope
 
-### Milestone 2 — Running MVP
-Completed in demo mode.
+Implemented:
 
-### Milestone 3 — Crypto-native settlement
-Pending.
+- frontend dashboard for intake, payment, trace, and outputs
+- backend manager workflow
+- x402-style challenge and quote packaging
+- Clarity payment contract scaffold
+- Stacks testnet payment signing and Hiro verification
+- research pipeline with `arXiv + OpenReview + local frameworks`
+- markdown dossier plus JSON output bundle
 
-### Milestone 4 — Production-grade specialist agents
-Pending.
+Not yet implemented:
 
-## Risks
-- real chain settlement may add latency and wallet complexity
-- PDF/image extraction quality depends on model / tool selection
-- true multi-agent orchestration needs careful state management
+- independently deployed specialist molbots
+- persistent job storage
+- non-STX settlement rails
+- registry and discovery layer
+- production-grade monitoring and ops
 
-## Immediate Next Actions
-1. add real payment verification path
-2. add one real specialist endpoint
-3. add submission-facing screenshots and demo script
-4. validate provider credentials before demo so fallback mode is only a safety net
-5. keep TuZi auth isolated from stale shell env overrides during local runs
+## Near-Term Priorities
+
+1. Keep demo and docs fully aligned with the current implementation.
+2. Strengthen the specialist-service story in the UI and outputs.
+3. Split at least one specialist path into a separately callable service.
+4. Add a cleaner agent-facing API surface for downstream automation.
+
+## Product Risks
+
+- overclaiming agent-to-agent settlement beyond the live implementation
+- stale docs drifting away from the product UI
+- demo reliability if wallet or testnet conditions are not prepared in advance
+
+## Success Criteria
+
+The project is in a strong state if a reviewer can immediately understand:
+
+- what the service is
+- how x402 is used
+- where Stacks fits
+- what becomes available after payment
+- why another molbot would buy these outputs

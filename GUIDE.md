@@ -1,302 +1,130 @@
-# AutoScholar Hackathon Guide
+# AutoScholar Submission Guide
 
-## 1. Project Overview
+This guide is the shortest path to presenting AutoScholar clearly during judging, demo recording, or async review.
 
-**Project Name:** AutoScholar: The x402-Powered Agentic Research Network
+## One-Sentence Pitch
 
-**Hackathon:** DoraHacks BUIDL Battle 2  
-**Submission Page:** https://dorahacks.io/hackathon/buidlbattle2/ideaism
+AutoScholar is a specialized research molbot that uses x402 on Stacks to quote premium research workflows, verify payment, and return outputs that other agents can consume.
 
-**Repository:** https://github.com/virusLuke3/x402-research.git
+## Positioning
 
-### Elevator Pitch
+The strongest way to frame the project is:
 
-AutoScholar is a decentralized multi-agent research network where specialized Molbots collaborate by hiring each other over the x402 protocol and settling payments with USDCx / sBTC on Stacks. Instead of one giant fragile agent trying to do everything, AutoScholar turns AI capabilities into composable paid microservices.
+- not as a generic AI search tool
+- not as a simple paywall
+- but as a paid research capability in an agent-to-agent economy
 
----
+The core idea is that high-value research becomes a reusable service with clear entitlement, settlement, and deliverable packaging.
 
-## 2. Problem Statement
+## What To Emphasize
 
-Today, building a single all-in-one AI agent is expensive, brittle, and operationally painful.
+### Innovation
 
-Examples:
-- long-document parsing often breaks with timeout or context issues
-- PDF image extraction and diagram understanding need a different toolchain than summarization
-- search, extraction, reasoning, and report writing are naturally separate tasks
-- independently built agents currently lack a native trustless payment and coordination layer
+- research is packaged as a commerce primitive
+- outputs are designed for downstream agents, not only humans
+- the workflow is exposed as a task tree and commerce trace
 
-The result is that useful specialist agents exist, but there is no clean decentralized economic layer for **agent-to-agent payments and service invocation**.
+### Technical Depth
 
----
+- frontend task orchestration UI
+- backend quote creation and workflow packaging
+- Python research pipeline for evidence retrieval and synthesis
+- Clarity invoice scaffold
+- Stacks testnet verification through Hiro
 
-## 3. Core Idea
+### Stacks Alignment
 
-AutoScholar proposes a reference architecture for **Molbot-to-Molbot commerce**.
+- settlement is executed on Stacks testnet
+- the payment path is modeled as a contract call, not a fake success toggle
+- the repo includes a Clarity contract and contract-oriented verification logic
 
-A user submits a complex research request to a **Manager Molbot**.
+### User Experience
 
-Example:
-> Summarize the latest 2025 papers on ZK Rollups and include the core architecture diagrams.
+- the user sees exactly what the service bundle costs
+- payment unlocks premium capabilities with a visible trace
+- results arrive as both a readable dossier and structured JSON packets
 
-The Manager Molbot can:
-- decompose the task
-- delegate sub-tasks to specialist Molbots
-- pay them automatically through x402 when needed
-- aggregate outputs into one final research report
+## What Is Real Today
 
-This creates a decentralized AI service marketplace where each agent can specialize and monetize its capability.
+- task creation and scoping
+- x402 challenge metadata
+- Stacks wallet signing flow
+- Hiro-backed transaction verification
+- task tree and commerce trace objects
+- markdown and JSON output bundle
 
----
+## What Is Not Yet Fully Implemented
 
-## 4. End-to-End Flow
+- independent networked molbots paying each other across separate services
+- real sBTC or USDCx transfer rails
+- on-chain registry and reputation for specialist discovery
 
-### Step 1: User request
-The user sends a research request to the Manager Molbot.
+This matters in judging. Be ambitious in the vision, but precise about what is live.
 
-### Step 2: Task decomposition
-The Manager decides which sub-agents are needed, for example:
-- paper search agent
-- PDF / image extraction agent
-- summarization agent
-- citation / formatting agent
+## Recommended Demo Story
 
-### Step 3: x402 challenge
-If the Manager calls a paid agent endpoint without valid payment credentials, the specialist Molbot returns:
-- HTTP `402 Payment Required`
-- pricing information
-- Stacks payment destination
-- requested amount (for example `0.5 USDCx`)
-- token / macaroon issuance rules after payment
+Use this flow in a live demo or video:
 
-### Step 4: On-chain payment
-The Manager Molbot constructs and broadcasts a Stacks transaction using `@stacks/network` and `@stacks/transactions`.
+1. Enter a research topic.
+2. Show that the manager molbot prepares a quote and pre-payment evidence.
+3. Highlight the task tree and specialist bundle.
+4. Connect a Stacks wallet and sign the parent invoice.
+5. Show payment verification and specialist unlock.
+6. Open the final dossier and JSON deliverables.
+7. Close with the agent handoff packet as proof that another molbot can reuse the work.
 
-### Step 5: Access grant
-After successful payment, the specialist Molbot returns an access credential such as a macaroon or API token.
+## Suggested Narration
 
-### Step 6: Task completion
-The specialist Molbot returns its output, such as:
-- extracted architecture diagrams
-- parsed figures from PDFs
-- structured notes
-- section summaries
+You can adapt this script directly:
 
-### Step 7: Final delivery
-The Manager combines all outputs into a polished final report for the user.
+> AutoScholar turns premium research into an x402-powered service on Stacks. A manager molbot scopes the task, prepares evidence, issues a quote, and only releases the paid specialist bundle after on-chain payment is verified. The result is not just a report for a human. It is a machine-readable handoff packet that another agent can purchase and use.
 
----
+## Judge-Facing Talking Points
 
-## 5. Why AutoScholar Matters
+If judges ask why this fits the bounty:
 
-AutoScholar is not just a research assistant. It is a **protocol pattern** for agentic commerce.
+- it is a specialized-skill molbot
+- it prices a premium capability
+- it uses x402 as the authorization and entitlement layer
+- it uses Stacks as the settlement layer
+- it delivers artifacts another molbot can buy and consume
 
-Key thesis:
-- future AI systems will be networks, not monoliths
-- specialist agents should be independently deployable
-- those agents need trust-minimized payments
-- x402 + Stacks makes machine-to-machine service commerce practical
+If judges ask about settlement assets:
 
-In other words, this project reframes AI agents as **crypto-native economic actors**.
+- the current implementation is STX-first
+- the architecture is intentionally compatible with future sBTC and USDCx rails
 
----
-
-## 6. Technical Architecture
-
-## 6.1 Agent Layer
-Use OpenClaw, LangChain, or another open agent framework to run independent Molbots.
-
-Example roles:
-- **Manager Molbot** — orchestrates the workflow
-- **Search Molbot** — finds relevant papers and metadata
-- **Image Extractor Molbot** — extracts diagrams / charts from PDFs
-- **Summarizer Molbot** — writes concise findings
-- **Citation Molbot** — formats references and final output
-
-## 6.2 API / x402 Layer
-Each specialist Molbot exposes an HTTP API using Node.js / Express.
-
-When a request arrives:
-- if payment proof is missing or invalid, return `402 Payment Required`
-- include pricing metadata and payment instructions
-- after payment verification, unlock the endpoint
-
-Possible response metadata:
-- service name
-- requested token (`USDCx` or `sBTC`)
-- price
-- Stacks contract or recipient address
-- quote expiry time
-- capability scope
-
-## 6.3 Stacks Integration
-Use Stacks tooling for payment execution and verification.
+If judges ask whether delegation is real:
 
-Suggested libraries:
-- `@stacks/network`
-- `@stacks/transactions`
-
-Use cases:
-- broadcast payments
-- verify settlement
-- derive payment receipt logic
-- connect API authorization to on-chain events
-
-## 6.4 Optional Smart Contract Layer
-A bonus path is building a **Molbot Registry** contract in Clarity.
-
-Example registry fields:
-- molbot name
-- endpoint URL
-- supported capabilities
-- base pricing
-- accepted asset (`USDCx`, `sBTC`)
-- developer / owner address
-
-This turns the system into a decentralized yellow pages for agent discovery.
+- the current release packages delegation as a first-class task tree and commerce trace
+- the next step is to split specialists into separately deployable services
 
----
-
-## 7. Token / Settlement Model
-
-### Preferred assets
-- **USDCx** for stable pricing of API services
-- **sBTC** for strong Bitcoin ecosystem alignment
-
-### Economic model
-- each Molbot prices its own capability
-- the Manager can compare providers by cost and quality
-- service fees are paid per task or per endpoint call
-- future extension: subscriptions, prepaid balances, escrow, reputation-weighted pricing
-
----
-
-## 8. Demo Narrative
-
-A strong demo could follow this sequence:
-
-1. User asks for a research report on ZK Rollups.
-2. Manager Molbot searches for relevant 2025 papers.
-3. Manager requests architecture diagrams from Image Extractor Molbot.
-4. Extractor responds with HTTP 402 and a USDCx payment request.
-5. Manager signs and broadcasts a Stacks payment.
-6. Extractor verifies payment and releases the extracted diagrams.
-7. Summarizer Molbot writes the final report.
-8. User receives a complete research package with diagrams and references.
-
-This is easy to understand and clearly demonstrates:
-- multi-agent orchestration
-- x402 payment challenge flow
-- Stacks settlement
-- real user value
-
----
-
-## 9. Judging Criteria Alignment
-
-## Innovation
-AutoScholar pushes x402 beyond human-to-machine checkout into **machine-to-machine commercial coordination**.
+## Submission Checklist
 
-## Technical Depth
-The project combines:
-- multi-agent orchestration
-- asynchronous task decomposition
-- payment-gated APIs
-- Stacks transaction handling
-- optional smart contracts for discovery
+- keep the README aligned with the live product
+- use screenshots that show task tree, settlement, and deliverables
+- record a demo under five minutes
+- avoid claiming sBTC or USDCx transfers are live if the repo still settles in STX
+- keep the narration focused on molbot-to-molbot commerce, not only research quality
 
-## Stacks Alignment
-The project is tightly aligned with the Stacks ecosystem:
-- uses Stacks for settlement
-- fits Bitcoin L2 narratives
-- supports SIP-010 assets like USDCx
-- can leverage fast confirmations after Nakamoto improvements
+## Recommended Assets For Submission
 
-## User Experience
-The user does not need to manage every micro-payment manually. The funding and payment logic happens mostly in the background between agents.
+- homepage screenshot
+- payment trace screenshot
+- completed dossier screenshot
+- short architecture diagram
+- 3-5 minute demo video
 
-## Ecosystem Impact
-This can become a reusable template:
-- clone repo
-- replace prompts and capabilities
-- register a specialized Molbot
-- join the x402 payment network
+## Short FAQ
 
-That gives the project platform potential beyond a single demo.
+### Why research?
 
----
+Because high-value research is easy to understand as a premium specialist capability and naturally benefits from structured outputs.
 
-## 10. Suggested MVP Scope
+### Why x402?
 
-To keep the hackathon build realistic, focus on a clean MVP.
+Because x402 gives the workflow a machine-readable payment challenge and entitlement layer.
 
-### MVP components
-- one **Manager Molbot**
-- one **specialist paid Molbot**
-- one x402-style `402 Payment Required` challenge flow
-- one Stacks payment path (real or testnet)
-- one final combined report output
+### Why Stacks?
 
-### Best specialist choice for MVP
-A good first paid Molbot is:
-- **Image / diagram extraction Molbot**
-
-Why:
-- easy to explain why it is specialized
-- clearly separate from summarization
-- visually compelling in demo videos
-- makes the value of delegation obvious
-
----
-
-## 11. Suggested Repo Roadmap
-
-Potential folders to add:
-
-```text
-x402-research/
-  docs/
-    architecture.md
-    demo-script.md
-    judges-guide.md
-  manager/
-  molbots/
-    extractor/
-    summarizer/
-  contracts/
-    MolbotRegistry.clar
-  api/
-  examples/
-  GUIDE.md
-```
-
----
-
-## 12. Suggested Next Deliverables
-
-Priority order:
-
-1. refine the architecture diagram
-2. define the 402 challenge / response schema
-3. implement a minimal Manager Molbot
-4. implement one paid specialist Molbot
-5. wire payment verification to service unlock
-6. produce a short end-to-end demo script
-7. improve README for judges
-
----
-
-## 13. Short Pitch Version
-
-AutoScholar is a decentralized agentic research network where specialized AI Molbots collaborate and pay each other using x402 on Stacks. A manager agent decomposes a research task, hires specialist agents such as diagram extractors or summarizers, settles payments in USDCx / sBTC, and returns a unified report to the user. The project demonstrates machine-to-machine commerce for AI services and offers a reusable template for crypto-native multi-agent systems.
-
----
-
-## 14. Practical Positioning
-
-If you need to explain the project in one sentence to judges:
-
-> AutoScholar turns specialized AI agents into crypto-native paid microservices that can trustlessly collaborate over x402 using Stacks settlement.
-
-If you need to explain why it is important:
-
-> The future of AI is not one giant model doing everything; it is a network of specialized agents that can discover, hire, and pay each other automatically.
+Because settlement and verification are anchored in the Stacks ecosystem, which is exactly what the hackathon is asking teams to explore.

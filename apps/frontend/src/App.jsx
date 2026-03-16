@@ -53,8 +53,9 @@ function buildExplorerTxUrl(txid, network = STACKS_NETWORK) {
 }
 
 function StatusPill({ status }) {
-  const label = status ? String(status).replaceAll('_', ' ') : 'idle';
-  return <span className={`statusPill status-${status || 'idle'}`}>{label}</span>;
+  const normalized = status ? String(status).replaceAll('-', '_') : 'idle';
+  const label = normalized.replaceAll('_', ' ');
+  return <span className={`statusPill status-${normalized}`}>{label}</span>;
 }
 
 function DetailRow({ label, value, mono = false }) {
@@ -66,8 +67,209 @@ function DetailRow({ label, value, mono = false }) {
   );
 }
 
+function formatTimestamp(value) {
+  if (!value) return 'Pending';
+  try {
+    return new Date(value).toLocaleString();
+  } catch {
+    return String(value);
+  }
+}
+
+function stringifyPayload(value) {
+  if (typeof value === 'string') return value;
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
+function TaskTreePanel({ taskTree }) {
+  const nodes = taskTree?.nodes || [];
+  if (!nodes.length) {
+    return (
+      <div className="traceCard">
+        <div className="traceCardHeader">
+          <div>
+            <p className="traceEyebrow">Task Tree</p>
+            <h3>Specialist bundle not created yet</h3>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const depths = [...new Set(nodes.map((node) => node.depth))].sort((a, b) => a - b);
+
+  return (
+    <div className="traceCard">
+      <div className="traceCardHeader">
+        <div>
+          <p className="traceEyebrow">Task Tree</p>
+          <h3>Bundled specialist execution graph</h3>
+        </div>
+        <StatusPill status={taskTree?.stage} />
+      </div>
+      <div className="traceMetaGrid">
+        <div className="traceMeta">
+          <span>Total Nodes</span>
+          <strong>{taskTree?.summary?.totalNodes || 0}</strong>
+        </div>
+        <div className="traceMeta">
+          <span>Paid Nodes</span>
+          <strong>{taskTree?.summary?.paidNodes || 0}</strong>
+        </div>
+        <div className="traceMeta">
+          <span>Specialists</span>
+          <strong>{taskTree?.summary?.specialistNodes || 0}</strong>
+        </div>
+      </div>
+      <div className="taskLaneGrid">
+        {depths.map((depth) => (
+          <div key={depth} className="taskLane">
+            <p className="traceEyebrow">Depth {depth}</p>
+            <div className="taskLaneStack">
+              {nodes
+                .filter((node) => node.depth === depth)
+                .map((node) => (
+                  <div key={node.id} className="taskNode">
+                    <div className="taskNodeHeader">
+                      <div>
+                        <h4>{node.label}</h4>
+                        <p>{node.role}</p>
+                      </div>
+                      <StatusPill status={node.status} />
+                    </div>
+                    <div className="taskNodeMeta">
+                      <span>{node.agent}</span>
+                      <span>{node.pricing?.displayAmount || 'Bundled / free'}</span>
+                    </div>
+                    <p className="taskNodeSummary">{node.resultSummary}</p>
+                    <p className="taskNodeHint">Unlock condition: {node.unlockCondition}</p>
+                  </div>
+                ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CommerceTracePanel({ commerceTrace }) {
+  const events = commerceTrace?.events || [];
+  if (!events.length) {
+    return (
+      <div className="traceCard">
+        <div className="traceCardHeader">
+          <div>
+            <p className="traceEyebrow">Commerce Trace</p>
+            <h3>No trace yet</h3>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="traceCard">
+      <div className="traceCardHeader">
+        <div>
+          <p className="traceEyebrow">Commerce Trace</p>
+          <h3>x402 quote, settlement, and delivery lifecycle</h3>
+        </div>
+        <StatusPill status={commerceTrace?.stage} />
+      </div>
+      <div className="traceTimeline">
+        {events.map((event) => (
+          <div key={event.id} className={`traceEvent traceEvent-${String(event.status || 'idle').replaceAll('-', '_')}`}>
+            <div className="traceEventHeader">
+              <div>
+                <h4>{event.title}</h4>
+                <p>{event.detail}</p>
+              </div>
+              <StatusPill status={event.status} />
+            </div>
+            <div className="traceEventMeta">
+              <span>{event.actor}</span>
+              <span>{formatTimestamp(event.timestamp)}</span>
+              {event.amountDisplay ? <span>{event.amountDisplay}</span> : null}
+              {event.txid ? <span className="monoText">{shortAddress(event.txid)}</span> : null}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function OutputManifestPanel({ outputs }) {
+  const items = outputs?.items || [];
+  if (!items.length) {
+    return (
+      <div className="traceCard">
+        <div className="traceCardHeader">
+          <div>
+            <p className="traceEyebrow">Outputs</p>
+            <h3>No deliverables yet</h3>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="traceCard">
+      <div className="traceCardHeader">
+        <div>
+          <p className="traceEyebrow">Outputs</p>
+          <h3>Human-readable + machine-readable deliverables</h3>
+        </div>
+        <StatusPill status={outputs?.status} />
+      </div>
+      <div className="outputStack">
+        {items.map((item) => (
+          <details key={item.id} className="outputCard" open={item.status === 'ready'}>
+            <summary className="outputCardSummary">
+              <div>
+                <strong>{item.title}</strong>
+                <p>{item.description}</p>
+              </div>
+              <div className="outputCardBadges">
+                <span>{item.format}</span>
+                <span>{item.audience}</span>
+                <StatusPill status={item.status} />
+              </div>
+            </summary>
+            <div className="outputCardBody">
+              {item.preview ? (
+                <pre>{String(item.preview).split('\n').slice(0, 22).join('\n')}</pre>
+              ) : item.payload ? (
+                <pre>{stringifyPayload(item.payload)}</pre>
+              ) : (
+                <p>{item.description}</p>
+              )}
+            </div>
+          </details>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MetricCard({ label, value, detail, tone = 'default' }) {
+  return (
+    <div className={`metricCard metricCard-${tone}`}>
+      <p>{label}</p>
+      <strong>{value}</strong>
+      <span>{detail}</span>
+    </div>
+  );
+}
+
 export default function App() {
-  const [topic, setTopic] = useState('我想知道最近的关于solidity漏洞的文章');
+  const [topic, setTopic] = useState('');
   const [job, setJob] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -78,10 +280,35 @@ export default function App() {
   const [executionLog, setExecutionLog] = useState([]);
   const [paymentTxid, setPaymentTxid] = useState('');
   const [verificationDetails, setVerificationDetails] = useState(null);
+  const [backendWorkflowPending, setBackendWorkflowPending] = useState(false);
 
   useEffect(() => {
     refreshPaymentReadiness({ silent: false }).catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    if (!job?.id) return undefined;
+    if (!(backendWorkflowPending || (job.status === 'processing' && !job.report))) return undefined;
+
+    let cancelled = false;
+    const timer = window.setInterval(async () => {
+      try {
+        const latest = await request(`/api/jobs/${job.id}`);
+        if (cancelled) return;
+        setJob(latest);
+        if (latest?.report) {
+          setBackendWorkflowPending(false);
+        }
+      } catch {
+        // Keep the optimistic processing UI even if a background poll fails.
+      }
+    }, 5000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [backendWorkflowPending, job?.id, job?.report, job?.status]);
 
   function pushExecutionEvent(message, tone = 'info') {
     setExecutionLog((current) => [
@@ -118,7 +345,7 @@ export default function App() {
     setVerificationDetails(null);
     setPaymentTxid('');
     setExecutionLog([]);
-    pushExecutionEvent('Submitting research task to the manager agent', 'info');
+    pushExecutionEvent('Submitting task to the Manager Molbot for scoping and pre-payment evidence prep', 'info');
 
     try {
       const created = await request('/api/research', {
@@ -126,8 +353,8 @@ export default function App() {
         body: JSON.stringify({ topic })
       });
       setJob(created);
-      pushExecutionEvent(`Evidence scan complete: ${created?.papers?.length || 0} sources prepared`, 'success');
-      pushExecutionEvent('x402 payment challenge created. Payment is required before premium synthesis.', 'muted');
+      pushExecutionEvent(`Pre-payment evidence pack ready: ${created?.papers?.length || 0} sources prepared`, 'success');
+      pushExecutionEvent('x402 parent invoice created. Verified payment will release the specialist molbot bundle.', 'muted');
     } catch (err) {
       const message = formatErrorMessage(err);
       setError(message);
@@ -157,7 +384,7 @@ export default function App() {
     setError('');
     try {
       setWalletStatus('connecting');
-      pushExecutionEvent('Connecting Leather wallet', 'info');
+      pushExecutionEvent('Connecting Leather wallet for parent-invoice settlement', 'info');
       await connectWallet(true);
     } catch (err) {
       const message = formatErrorMessage(err);
@@ -238,7 +465,7 @@ export default function App() {
       }
 
       const sender = walletAddress || await connectWallet(false).catch(() => connectWallet(true));
-      pushExecutionEvent(`Using sender ${shortAddress(sender)} on ${STACKS_NETWORK}`, 'info');
+      pushExecutionEvent(`Using sender ${shortAddress(sender)} on ${STACKS_NETWORK} for the parent invoice`, 'info');
 
       const paymentRequest = job.paymentRequest;
       const contractId = paymentRequest?.clarity?.contractPrincipal;
@@ -247,14 +474,14 @@ export default function App() {
       }
 
       await ensureContractDeployed(contractId, paymentRequest?.stacks?.apiBase || 'https://api.testnet.hiro.so');
-      pushExecutionEvent(`Contract ready: ${contractId}`, 'success');
+      pushExecutionEvent(`Settlement contract ready: ${contractId}`, 'success');
 
       const postConditions = paymentRequest?.asset === 'STX'
         ? [Pc.principal(sender).willSendEq(BigInt(String(paymentRequest.amount))).ustx()]
         : [];
 
       setWalletStatus('signing');
-      pushExecutionEvent(`Waiting for Leather to sign ${paymentRequest?.stacks?.displayAmount || `${paymentRequest.amount} ${paymentRequest.asset}`}`, 'info');
+      pushExecutionEvent(`Waiting for Leather to sign ${paymentRequest?.stacks?.displayAmount || `${paymentRequest.amount} ${paymentRequest.asset}`} and release paid specialist tasks`, 'info');
 
       const txResult = await walletRequest(
         { forceWalletSelect: false, persistWalletSelect: true, enableLocalStorage: true },
@@ -288,7 +515,18 @@ export default function App() {
       );
 
       setWalletStatus('verifying');
-      pushExecutionEvent('Payment confirmed on Hiro. Submitting proof to backend and starting agent workflow.', 'info');
+      pushExecutionEvent('Payment confirmed on Hiro. Submitting proof so the specialist molbot bundle can start.', 'info');
+      setBackendWorkflowPending(true);
+      setVerificationDetails({
+        txid: txResult.txid,
+        sender,
+        invoiceStatus: 'verifying'
+      });
+      setJob((current) => current ? {
+        ...current,
+        status: 'processing'
+      } : current);
+      pushExecutionEvent('Backend accepted payment proof. Running paid specialists and packaging outputs. This can take a few minutes.', 'info');
 
       const completed = await request(`/api/jobs/${job.id}/pay`, {
         method: 'POST',
@@ -301,10 +539,11 @@ export default function App() {
 
       setJob(completed);
       setVerificationDetails(completed?.paymentReceipt || null);
+      setBackendWorkflowPending(false);
       if (completed?.status === 'completed_with_fallback') {
-        pushExecutionEvent('Payment verified, but report fell back to degraded synthesis.', 'warn');
+        pushExecutionEvent('Payment verified, but delivery used a degraded synthesis fallback.', 'warn');
       } else {
-        pushExecutionEvent('Payment verified. Agent workflow completed and report unlocked.', 'success');
+        pushExecutionEvent('Payment verified. Paid specialists completed and deliverables were unlocked.', 'success');
       }
       setWalletStatus('connected');
     } catch (err) {
@@ -312,6 +551,7 @@ export default function App() {
       const message = formatErrorMessage(err);
       setError(message);
       pushExecutionEvent(message, 'error');
+      setBackendWorkflowPending(false);
       setWalletStatus(walletAddress ? 'connected' : 'disconnected');
     } finally {
       setLoading(false);
@@ -322,6 +562,8 @@ export default function App() {
   const hasReport = Boolean(job?.report);
   const paymentStatus = job?.paymentReceipt
     ? 'paid'
+    : backendWorkflowPending
+      ? 'processing'
     : job?.status === 'awaiting-payment'
       ? 'pending'
       : job?.status === 'failed'
@@ -336,8 +578,10 @@ export default function App() {
   const txExplorerUrl = buildExplorerTxUrl(paymentTxid || job?.paymentReceipt?.txid, network);
   const canPay = Boolean(job?.status === 'awaiting-payment');
   const walletReady = walletStatus === 'connected' && walletAddress;
+  const serviceBundleCount = job?.serviceManifest?.length || 0;
+  const outputCount = job?.outputs?.items?.length || 0;
   const unlockLabel = walletReady
-    ? `Sign & Pay ${displayAmount} to Unlock Agent Data`
+    ? `Sign & Pay ${displayAmount} to Unlock Specialist Bundle`
     : `Connect Leather Wallet`;
 
   const terminalEntries = useMemo(() => {
@@ -359,10 +603,18 @@ export default function App() {
       }
     }
 
-    if (job?.status === 'awaiting-payment' && !job?.paymentReceipt) {
+    if (backendWorkflowPending) {
+      entries.push({
+        id: 'job-processing',
+        message: 'Backend is running paid specialists and packaging dossier plus JSON handoff outputs.',
+        tone: 'info'
+      });
+    }
+
+    if (job?.status === 'awaiting-payment' && !job?.paymentReceipt && !backendWorkflowPending) {
       entries.push({
         id: 'job-locked',
-        message: `Awaiting x402 payment to unlock premium research synthesis for ${displayAmount}`,
+        message: `Awaiting x402 payment to release the specialist bundle priced at ${displayAmount}`,
         tone: 'muted'
       });
     }
@@ -370,7 +622,7 @@ export default function App() {
     if (job?.status === 'completed' && hasReport) {
       entries.push({
         id: 'job-ready',
-        message: 'Final report ready for review',
+        message: 'Dossier and machine-readable deliverables are ready',
         tone: 'success'
       });
     }
@@ -378,7 +630,7 @@ export default function App() {
     if (job?.status === 'completed_with_fallback') {
       entries.push({
         id: 'job-fallback',
-        message: 'Workflow completed with fallback synthesis',
+        message: 'Delivery completed with fallback synthesis',
         tone: 'warn'
       });
     }
@@ -392,207 +644,332 @@ export default function App() {
     }
 
     return entries;
-  }, [displayAmount, executionLog, hasReport, job]);
+  }, [backendWorkflowPending, displayAmount, executionLog, hasReport, job]);
 
   return (
     <div className="appShell">
-      <header className="appHeader">
-        <div>
-          <p className="appEyebrow">AutoScholar</p>
-          <h1>x402-powered agent research</h1>
+      <header className="topRail">
+        <div className="brandCluster">
+          <div className="brandSticker">
+            <span>AutoScholar</span>
+            <span>Get Paid / Get Signal</span>
+          </div>
+          <div className="brandCopy">
+            <p className="appEyebrow">x402 / Stacks Research Network</p>
+            <h2>Specialized research molbots for agentic commerce</h2>
+          </div>
         </div>
-        <div className="headerMeta">
-          <span className="headerMetaItem">{walletAddress ? shortAddress(walletAddress) : 'Wallet not connected'}</span>
-          <StatusPill status={job?.status} />
+        <div className="topRailActions">
+          <div className={`topPill ${paymentReadiness?.ok ? 'topPillLive' : ''}`}>
+            <span className="topPillDot" />
+            {paymentReadiness?.ok ? 'Settlement ready' : 'Setup required'}
+          </div>
+          <div className="topPill">{walletAddress ? shortAddress(walletAddress) : 'Wallet idle'}</div>
+          <button
+            type="button"
+            className="topButton"
+            onClick={() => document.getElementById('task-intake')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+          >
+            Create Task
+          </button>
+          <button
+            type="button"
+            className="topButton topButtonAccent"
+            onClick={handleConnectWallet}
+            disabled={loading}
+          >
+            {walletAddress ? 'Reconnect Wallet' : 'Connect Wallet'}
+          </button>
         </div>
       </header>
 
-      <main className="workspaceGrid">
-        <section className="workspaceCard">
-          <div className="cardHeader">
-            <div>
-              <p className="cardEyebrow">Column 1</p>
-              <h2>Research Task</h2>
-            </div>
-            <span className="cardHint">{API_BASE || '/api proxy'}</span>
-          </div>
-
-          <p className="cardCopy">
-            Describe the research question. The system will scan evidence first, then gate premium synthesis behind x402 payment.
+      <section className="heroPanel">
+        <div className="heroCopy">
+          <p className="heroEyebrow">Specialized Skill Molbot</p>
+          <h1>Quote premium research workflows, settle with x402, export outputs other agents can reuse.</h1>
+          <p className="heroLead">
+            AutoScholar turns deep research into a commerce primitive. A manager molbot scopes the task, x402 issues a parent invoice,
+            Stacks verifies settlement, then the system unlocks paid specialists and packages human-readable plus machine-readable deliverables.
           </p>
-
-          <form onSubmit={createJob} className="queryForm">
-            <textarea
-              id="topic-input"
-              value={topic}
-              onChange={(event) => setTopic(event.target.value)}
-              rows={10}
-              placeholder="Describe the research topic you want the agent to investigate..."
-            />
-            <button className="primaryButton" disabled={loading}>
-              {loading && !canPay ? 'Scanning...' : 'Submit Research Task'}
+          <div className="heroActionRow">
+            <button
+              type="button"
+              className="heroButton heroButtonPrimary"
+              onClick={() => document.getElementById('task-intake')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+            >
+              Launch Research Task
             </button>
-          </form>
-
-          {error ? <p className="errorBanner" role="alert">{error}</p> : null}
-
-          {job ? (
-            <div className="summaryCard">
-              <div className="summaryHeader">
-                <h3>Task Summary</h3>
-                <StatusPill status={job.status} />
-              </div>
-              <div className="summaryRows">
-                <DetailRow label="Job ID" value={job.id} mono />
-                <DetailRow label="Research Mode" value={job.researchMode || 'analysis'} />
-                <DetailRow label="Evidence Prepared" value={`${job?.papers?.length || 0} sources`} />
-              </div>
-            </div>
-          ) : (
-            <div className="placeholderState">
-              Submit a topic to create an agent task and generate an x402 payment challenge.
-            </div>
-          )}
-        </section>
-
-        <section className="workspaceCard">
-          <div className="cardHeader">
-            <div>
-              <p className="cardEyebrow">Column 2</p>
-              <h2>Payment Gateway</h2>
-            </div>
-            <StatusPill status={paymentStatus} />
+            <button
+              type="button"
+              className="heroButton heroButtonSecondary"
+              onClick={() => document.getElementById('settlement-gateway')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+            >
+              Inspect Payment Flow
+            </button>
           </div>
-
-          <p className="cardCopy">
-            This card merges the x402 payment details and Leather wallet actions into one focused payment flow.
-          </p>
-
-          <div className="gatewayGrid">
-            <DetailRow label="Network" value={network} />
-            <DetailRow label="Asset & Price" value={displayAmount} />
-            <DetailRow label="Recipient" value={shortAddress(recipient)} mono />
-            <DetailRow label="Contract" value={contractPrincipal} mono />
+          <div className="heroTagRow">
+            {(job?.serviceManifest || [
+              { id: 'dossier', title: 'Research Dossier' },
+              { id: 'evidence', title: 'Evidence Pack' },
+              { id: 'handoff', title: 'Agent Handoff Packet' }
+            ]).map((service) => (
+              <span key={service.id} className="heroTag">{service.title}</span>
+            ))}
           </div>
+        </div>
+        <aside className="heroAside">
+          <div className="quoteCard">
+            <p className="traceEyebrow">Parent Invoice</p>
+            <div className="quoteAmount">{displayAmount}</div>
+            <div className="quoteMeta">
+              <span>Bundle size: {serviceBundleCount || 4} paid services</span>
+              <span>Outputs: {outputCount || 3} deliverables</span>
+              <span>Status: {job?.status ? String(job.status).replaceAll('_', ' ') : 'idle'}</span>
+            </div>
+            <button
+              type="button"
+              className="heroButton heroButtonPrimary quoteButton"
+              onClick={walletReady ? payAndComplete : handleConnectWallet}
+              disabled={loading || (!job && walletReady)}
+            >
+              {canPay ? unlockLabel : walletAddress ? 'Create task to quote bundle' : 'Connect wallet to settle'}
+            </button>
+          </div>
+          <div className="stickerCluster">
+            <div className="microSticker">x402 VERIFIED</div>
+            <div className="microSticker microStickerAlt">STACKS TESTNET</div>
+            <div className="microSticker">AGENT OUTPUTS</div>
+          </div>
+        </aside>
+      </section>
 
-          <div className="walletPanel">
-            <div className="walletHeader">
+      <section className="statsStrip">
+        <MetricCard label="Bundle Quote" value={displayAmount} detail="Single parent invoice on Stacks" tone="accent" />
+        <MetricCard label="Evidence Prepared" value={`${job?.papers?.length || 0}`} detail="Pre-payment sources staged by the manager" />
+        <MetricCard label="Paid Specialists" value={`${serviceBundleCount || 0}`} detail="Capabilities released after verified payment" />
+        <MetricCard label="Deliverables" value={`${outputCount || 0}`} detail="Markdown dossier + JSON handoff artifacts" tone="success" />
+      </section>
+
+      <main className="dashboardLayout">
+        <section className="dashboardColumn">
+          <section className="workspaceCard heroCard" id="task-intake">
+            <div className="cardHeader">
               <div>
-                <h3>Leather Wallet</h3>
-                <p>{walletAddress ? 'Wallet connected and ready for testnet signing.' : 'Connect a Stacks testnet wallet to continue.'}</p>
+                <p className="cardEyebrow">Task Intake</p>
+                <h2>Commission A Research Workflow</h2>
               </div>
-              <button
-                type="button"
-                className="secondaryButton"
-                onClick={handleConnectWallet}
-                disabled={loading}
-              >
-                {walletAddress ? 'Reconnect Leather Wallet' : 'Connect Leather Wallet'}
-              </button>
+              <span className="cardHint">{API_BASE || '/api proxy'}</span>
             </div>
 
-            <div className="walletDetails">
-              <DetailRow label="Wallet Address" value={walletAddress || 'Not connected'} mono />
-              <DetailRow label="Wallet Status" value={walletStatus.replaceAll('_', ' ')} />
+            <p className="cardCopy">
+              Write the job the way another agent would describe it: what needs to be investigated, what decision it should support, and what kind of output is expected.
+            </p>
+
+            <form onSubmit={createJob} className="queryForm">
+              <textarea
+                id="topic-input"
+                value={topic}
+                onChange={(event) => setTopic(event.target.value)}
+                rows={10}
+                placeholder="Describe the research task you want this molbot network to investigate..."
+              />
+              <p className="inputHelper">You can enter any topic you want to learn about.</p>
+              <div className="formActionRow">
+                <button className="primaryButton" disabled={loading}>
+                  {loading && !canPay ? 'Scoping...' : 'Create Molbot Task'}
+                </button>
+                <button
+                  type="button"
+                  className="secondaryButton"
+                  onClick={() => setTopic('Design a molbot-to-molbot commerce protocol on Stacks using x402, with research outputs packaged for downstream agents.')}
+                >
+                  Load Demo Prompt
+                </button>
+              </div>
+            </form>
+
+            {error ? <p className="errorBanner" role="alert">{error}</p> : null}
+
+            {job ? (
+              <div className="summaryCard">
+                <div className="summaryHeader">
+                  <h3>Task Summary</h3>
+                  <StatusPill status={job.status} />
+                </div>
+                <div className="summaryRows">
+                  <DetailRow label="Job ID" value={job.id} mono />
+                  <DetailRow label="Research Mode" value={job.researchMode || 'analysis'} />
+                  <DetailRow label="Evidence Prepared" value={`${job?.papers?.length || 0} sources`} />
+                  <DetailRow label="Service Bundle" value={`${serviceBundleCount} paid deliverables`} />
+                  <DetailRow label="Outputs" value={`${outputCount || 3} dossier / JSON packets`} />
+                </div>
+                {job?.serviceManifest?.length ? (
+                  <div className="serviceTagGrid">
+                    {job.serviceManifest.map((service) => (
+                      <div key={service.id} className="serviceTag">
+                        <strong>{service.title}</strong>
+                        <span>{service.format} · {service.audience}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <div className="placeholderState">
+                Create a task to generate a parent invoice, specialist bundle, and agent-readable deliverables.
+              </div>
+            )}
+          </section>
+
+          <section className="workspaceCard" id="settlement-gateway">
+            <div className="cardHeader">
+              <div>
+                <p className="cardEyebrow">Settlement Gateway</p>
+                <h2>x402 Quote + Stacks Verification</h2>
+              </div>
+              <StatusPill status={paymentStatus} />
             </div>
-          </div>
 
-          <button
-            type="button"
-            className="primaryButton primaryButtonWide"
-            onClick={walletReady ? payAndComplete : handleConnectWallet}
-            disabled={loading || !job}
-          >
-            {canPay ? unlockLabel : 'Create a research task before payment'}
-          </button>
+            <p className="cardCopy">
+              The gateway quotes the bundle, binds x402 authorization to the job, and only releases paid specialist capabilities after Stacks verification succeeds.
+            </p>
 
-          <div className="gatewayNotes">
-            {paymentReadiness?.warnings?.map((warning) => (
-              <p key={warning} className="notice noticeWarn">{warning}</p>
-            ))}
-            {paymentReadiness?.missing?.map((missing) => (
-              <p key={missing} className="notice noticeError">Missing configuration: {missing}</p>
-            ))}
-            {!job ? (
-              <p className="notice noticeMuted">No active task yet. Submit a topic first, then sign the payment request.</p>
+            <div className="gatewayGrid">
+              <DetailRow label="Network" value={network} />
+              <DetailRow label="Asset & Price" value={displayAmount} />
+              <DetailRow label="Recipient" value={shortAddress(recipient)} mono />
+              <DetailRow label="Contract" value={contractPrincipal} mono />
+            </div>
+
+            <div className="walletPanel">
+              <div className="walletHeader">
+                <div>
+                  <h3>Leather Wallet</h3>
+                  <p>{walletAddress ? 'Wallet connected and ready to settle the parent invoice on testnet.' : 'Connect a Stacks testnet wallet to continue.'}</p>
+                </div>
+                <button
+                  type="button"
+                  className="secondaryButton"
+                  onClick={handleConnectWallet}
+                  disabled={loading}
+                >
+                  {walletAddress ? 'Reconnect Leather Wallet' : 'Connect Leather Wallet'}
+                </button>
+              </div>
+
+              <div className="walletDetails">
+                <DetailRow label="Wallet Address" value={walletAddress || 'Not connected'} mono />
+                <DetailRow label="Wallet Status" value={walletStatus.replaceAll('_', ' ')} />
+              </div>
+            </div>
+
+            <button
+              type="button"
+              className="primaryButton primaryButtonWide"
+              onClick={walletReady ? payAndComplete : handleConnectWallet}
+              disabled={loading || !job}
+            >
+              {canPay ? unlockLabel : 'Create a molbot task before payment'}
+            </button>
+
+            <div className="gatewayNotes">
+              {paymentReadiness?.warnings?.map((warning) => (
+                <p key={warning} className="notice noticeWarn">{warning}</p>
+              ))}
+              {paymentReadiness?.missing?.map((missing) => (
+                <p key={missing} className="notice noticeError">Missing configuration: {missing}</p>
+              ))}
+              {!job ? (
+                <p className="notice noticeMuted">No active task yet. Create a task first, then settle the parent invoice.</p>
+              ) : null}
+            </div>
+
+            {verificationDetails ? (
+              <div className="receiptCard">
+                <h3>Payment Receipt</h3>
+                <div className="summaryRows">
+                  <DetailRow label="Transaction" value={verificationDetails.txid || paymentTxid || 'n/a'} mono />
+                  <DetailRow label="Sender" value={verificationDetails.sender || walletAddress || 'n/a'} mono />
+                  <DetailRow label="Invoice State" value={verificationDetails.invoiceStatus || paymentStatus} />
+                </div>
+              </div>
             ) : null}
-          </div>
 
-          {verificationDetails ? (
-            <div className="receiptCard">
-              <h3>Payment Receipt</h3>
-              <div className="summaryRows">
-                <DetailRow label="Transaction" value={verificationDetails.txid || paymentTxid || 'n/a'} mono />
-                <DetailRow label="Sender" value={verificationDetails.sender || walletAddress || 'n/a'} mono />
-                <DetailRow label="Invoice State" value={verificationDetails.invoiceStatus || paymentStatus} />
-              </div>
-            </div>
-          ) : null}
-
-          {txExplorerUrl ? (
-            <a className="textLink" href={txExplorerUrl} target="_blank" rel="noreferrer">
-              View transaction in Hiro Explorer
-            </a>
-          ) : null}
+            {txExplorerUrl ? (
+              <a className="textLink" href={txExplorerUrl} target="_blank" rel="noreferrer">
+                View transaction in Hiro Explorer
+              </a>
+            ) : null}
+          </section>
         </section>
 
-        <section className="workspaceCard terminalColumn">
-          <div className="cardHeader">
-            <div>
-              <p className="cardEyebrow">Column 3</p>
-              <h2>Agent Terminal</h2>
-            </div>
-            <span className="cardHint">{hasReport ? 'Result Output' : 'Execution Log'}</span>
-          </div>
-
-          {!job ? (
-            <div className="terminalLocked">
-              Awaiting a research task. Submit a topic to initialize the agent workflow.
-            </div>
-          ) : (
-            <div className="terminalStack">
-              {job.status === 'awaiting-payment' && !job.paymentReceipt ? (
-                <div className="terminalLocked">
-                  Awaiting x402 payment to fetch premium research materials and unlock agent synthesis.
-                </div>
-              ) : null}
-
-              {terminalEntries.length ? (
-                <div className="terminalLog">
-                  {terminalEntries.map((entry) => (
-                    <div key={entry.id} className={`terminalLine terminalLine-${entry.tone}`}>
-                      <span className="terminalDot" />
-                      <p>{entry.message}</p>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-
-              {job.status === 'processing' && !hasReport ? (
-                <div className="processingState">
-                  Agent workflow is running. The backend is synthesizing the final report.
-                </div>
-              ) : null}
-
-              {reportMarkdown ? (
-                <article className="reportCard">
-                  <div className="reportHeader">
-                    <h3>Research Report</h3>
-                    <StatusPill status={job.status} />
-                  </div>
-                  <div className="markdownReport">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{reportMarkdown}</ReactMarkdown>
-                  </div>
-                </article>
-              ) : null}
-
-              {!reportMarkdown && job.status !== 'processing' && job.status !== 'awaiting-payment' ? (
-                <div className="placeholderState">No report output yet.</div>
-              ) : null}
-            </div>
-          )}
+        <section className="dashboardColumn">
+          <TaskTreePanel taskTree={job?.taskTree} />
+          <CommerceTracePanel commerceTrace={job?.commerceTrace} />
         </section>
       </main>
+
+      <section className="bottomDeck">
+        <div className="bottomDeckItem">
+          {terminalEntries.length ? (
+            <div className="traceCard">
+              <div className="traceCardHeader">
+                <div>
+                  <p className="traceEyebrow">Runtime Log</p>
+                  <h3>Operator-visible execution notes</h3>
+                </div>
+              </div>
+              <div className="terminalLog">
+                {terminalEntries.map((entry) => (
+                  <div key={entry.id} className={`terminalLine terminalLine-${entry.tone}`}>
+                    <span className="terminalDot" />
+                    <p>{entry.message}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="traceCard">
+              <div className="traceCardHeader">
+                <div>
+                  <p className="traceEyebrow">Runtime Log</p>
+                  <h3>No activity yet</h3>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="bottomDeckItem">
+          <OutputManifestPanel outputs={job?.outputs || job?.report?.outputs} />
+        </div>
+      </section>
+
+      {(job?.status === 'processing' || backendWorkflowPending) && !hasReport ? (
+        <div className="processingBanner">
+          Paid specialists are running. The backend is packaging the dossier and agent handoff outputs.
+        </div>
+      ) : null}
+
+      {reportMarkdown ? (
+        <section className="reportShowcase">
+          <article className="reportCard">
+            <div className="reportHeader">
+              <div>
+                <p className="traceEyebrow">Premium Dossier</p>
+                <h3>Research Dossier</h3>
+              </div>
+              <StatusPill status={job.status} />
+            </div>
+            <div className="markdownReport">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{reportMarkdown}</ReactMarkdown>
+            </div>
+          </article>
+        </section>
+      ) : null}
+
+      {!job ? null : !reportMarkdown && job.status !== 'processing' && job.status !== 'awaiting-payment' && !backendWorkflowPending ? (
+        <div className="placeholderState reportPlaceholder">No report output yet.</div>
+      ) : null}
     </div>
   );
 }

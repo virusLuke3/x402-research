@@ -195,4 +195,7 @@ class ResearchParliament:
             {"role": "system", "content": system_prompt + " 严格输出 JSON。"},
             {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
         ]
-        return self.client.call_json(messages=messages, fallback=fallback, temperature=0.15, model=self.model)
+        try:
+            return self.client.call_json(messages=messages, fallback=fallback, temperature=0.15, model=self.model)
+        except Exception:
+            return fallback

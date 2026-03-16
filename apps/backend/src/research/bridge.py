@@ -367,7 +367,7 @@ def build_fallback_report(topic: str, research_mode: str, topic_profile: dict, e
         "## 2. 研究范围与方法",
         (
             "采用 multi-source retrieval (arXiv + OpenReview) -> relevance filtering -> evidence ranking "
-            "-> fallback synthesis 的流程，并要求至少 40 篇论文证据才进入报告生成。"
+            f"-> fallback synthesis 的流程，并要求至少 {config.minimum_paper_count} 篇论文证据才进入报告生成。"
         ),
         "",
         "## 3. 证据来源概览",

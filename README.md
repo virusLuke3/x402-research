@@ -1,33 +1,120 @@
 # AutoScholar
 
-AutoScholar is an x402-powered deep research agent network prototype for DoraHacks BUIDL Battle 2. The current version is wired for a real Stacks testnet payment loop: the frontend can connect a Leather/Xverse wallet, call `pay-invoice`, wait for Hiro confirmation, and submit `txid + sender + x402 authorization` back to the backend for verification and premium unlock.
+AutoScholar is an x402-powered research molbot network on Stacks.
 
-It demonstrates this flow:
-- a **Manager Molbot** receives a complex research request
-- it queries **arXiv** for relevant papers
-- it delegates a specialist task to a paid **Image Extractor Molbot**
-- the specialist returns an **HTTP 402 Payment Required** challenge
-- the user signs a Stacks testnet contract call from their wallet
-- the backend verifies the transaction against Hiro and the x402 challenge
-- a summarizer model is called directly from the backend through an **OpenAI-compatible provider**
-- the final research result is returned as a combined report
+It turns premium research into a commerce primitive:
 
-## Repo Structure
+- a requester submits a topic or decision-support task
+- a manager molbot scopes the work and stages evidence before payment
+- the backend returns an x402 challenge plus Stacks settlement metadata
+- verified payment unlocks a paid specialist bundle
+- the system ships both human-readable and agent-readable deliverables
+
+The result is not just a paywalled report. It is a machine-consumable research service that other agents can hire.
+
+## Why This Project Fits The Theme
+
+AutoScholar is positioned as a specialized-skill molbot for agentic commerce:
+
+- research is the paid service
+- x402 is the entitlement and challenge layer
+- Stacks is the settlement and verification layer
+- the output bundle is designed for both humans and downstream agents
+
+This maps directly to the hackathon prompt: molbots interacting with each other, delegating work, and paying for premium capabilities on Stacks.
+
+## What The Demo Shows
+
+1. A requester creates a research task in the frontend.
+2. The manager molbot prepares a pre-payment evidence pack.
+3. The backend issues an x402 challenge and parent invoice metadata.
+4. The user signs a `pay-invoice` contract call on Stacks testnet.
+5. The frontend polls Hiro until the transaction succeeds.
+6. The backend verifies the transaction plus x402 authorization payload.
+7. The paid specialist bundle is released and the final deliverables are packaged.
+
+## Product Surface
+
+### Human-facing
+
+- task intake UI
+- wallet connection and settlement status
+- task tree and commerce trace panels
+- payment readiness diagnostics
+- final markdown research dossier
+
+### Agent-facing
+
+- x402 challenge metadata
+- parent-invoice and settlement details
+- task tree describing unlocked specialist work
+- commerce trace describing quote, payment, verification, and delivery
+- JSON deliverables for downstream automation
+
+## Deliverables
+
+After a verified payment, AutoScholar packages:
+
+- `Research Dossier`
+  - format: `markdown`
+  - audience: `human + agent`
+  - contents: synthesis, implications, limitations, citations
+- `Research Brief`
+  - format: `json`
+  - audience: `agent`
+  - contents: summary, key findings, consensus, next actions
+- `Evidence Pack`
+  - format: `json`
+  - audience: `agent`
+  - contents: structured evidence shortlist and extracted assets
+- `Citation Ledger`
+  - format: `json`
+  - audience: `agent`
+  - contents: normalized citations and payment references
+- `Agent Handoff Packet`
+  - format: `json`
+  - audience: `agent`
+  - contents: task, payment, trace, and deliverable inventory
+
+## Research Coverage
+
+The current research pipeline combines:
+
+- `arXiv` retrieval
+- `OpenReview` retrieval
+- local topic frameworks and protocol notes
+
+The current implementation does not include a separate source named `OpenResearch`. If you mean `OpenReview`, it is already covered.
+
+## Architecture Snapshot
+
+- frontend: React + Vite dashboard
+- backend: Express API for task intake, x402 challenge creation, settlement verification, and report packaging
+- research pipeline: Python retrieval and synthesis workflow
+- settlement rail: Stacks testnet verification through Hiro
+- contract: Clarity invoice-style payment scaffold
+
+## Repo Layout
 
 ```text
 apps/
-  backend/   Express API for manager flow, arXiv search, and x402-style challenge
-  frontend/  React + Vite demo UI
-  
+  backend/   Express manager service and research pipeline bridge
+  frontend/  React dashboard for intake, payment, trace, and outputs
+
+contracts/
+  autoscholar-payments.clar   Clarity payment contract scaffold
+
 docs/
-  architecture.md  Current architecture notes and evolution plan
-GUIDE.md     Product, architecture, MVP, and hackathon positioning
-PROJECT.md   Simple project management status
+  architecture.md             System architecture and lifecycle notes
+  demo.md                     Demo script and presenter notes
+  clarity-contract.md         Contract behavior and verification notes
+  比赛要求.md                  Hackathon requirement mapping in Chinese
 ```
 
-## Local Development
+## Quick Start
 
 ### Requirements
+
 - Node.js 20+
 - npm 10+
 
@@ -39,13 +126,18 @@ npm install
 
 ### Configure
 
-Copy `.env.example` to `.env` and fill in values.
+Copy `.env.example` to `.env` and fill in the required values.
 
-Current local setup uses:
-- TuZi OpenAI-compatible API at `https://api.tu-zi.com/v1`
-- model `gpt-5.4`
-- evidence source `local x402/stacks knowledge base + arXiv`
-- real Stacks testnet verification through Hiro API
+Common local settings include:
+
+- `OPENAI_BASE_URL`
+- `OPENAI_API_KEY`
+- `OPENAI_MODEL`
+- `STACKS_NETWORK`
+- `STACKS_API_BASE`
+- `STACKS_PAYMENT_CONTRACT`
+- `STACKS_RECIPIENT`
+- `STACKS_PAYMENT_AMOUNT`
 
 ### Run
 
@@ -54,10 +146,11 @@ npm run dev
 ```
 
 This starts:
+
 - frontend on `http://localhost:5173`
 - backend on `http://localhost:8787`
 
-If you need to point the frontend at a different backend port during local debugging, set:
+To point the frontend at a different backend:
 
 ```bash
 VITE_API_BASE=http://localhost:8790 npm --workspace apps/frontend run dev
@@ -65,117 +158,73 @@ VITE_API_BASE=http://localhost:8790 npm --workspace apps/frontend run dev
 
 ## Payment Readiness
 
-The backend now exposes `GET /api/payment/readiness`, which the frontend uses to show:
-- whether `.env` has real `STACKS_PAYMENT_CONTRACT` / `STACKS_RECIPIENT`
-- whether the configured contract is actually deployed on Stacks testnet
-- the effective payment amount and asset
-- what is still needed before a real Leather payment can succeed
+The backend exposes `GET /api/payment/readiness` so the frontend can show:
 
-Important:
-- the backend loads `.env` before Stacks modules initialize, so changing `STACKS_*` values now correctly affects the running service
-- `STACKS_PAYMENT_AMOUNT` must be an integer micro-STX amount, for example `500000` for `0.5 STX`
+- whether key `STACKS_*` variables are present
+- whether the configured contract is deployed on testnet
+- the effective payment amount and asset
+- what is missing before a real settlement can succeed
+
+Important notes:
+
+- the current live settlement path is `STX-first`
+- `STACKS_PAYMENT_AMOUNT` must be an integer micro-STX amount
+- sBTC and USDCx are part of the product narrative and future roadmap, not a fully implemented transfer path in this repo
 
 ## Real Testnet Flow
 
-1. Open the frontend.
-2. Submit a research prompt.
-3. The manager searches arXiv and creates a job in `awaiting-payment`.
-4. The UI shows the x402-style challenge from the specialist molbot.
-5. Click **connect wallet** or **connect + pay** and approve the Stacks testnet contract call in Leather.
-6. The frontend polls Hiro until the transaction reaches `success`.
-7. The backend verifies the contract call, args, transfer event, and x402 authorization, then returns the completed report.
-8. If the provider credentials are invalid, the backend returns a fallback report instead of failing the whole payment flow.
+To complete a real wallet flow you need:
 
-To make step 5 succeed with a real Leather wallet, you need:
-- a Leather wallet switched to `Stacks testnet`
-- testnet STX in that wallet
-- a deployed `autoscholar-payments.clar` contract on testnet
-- `.env` values for `STACKS_PAYMENT_CONTRACT` and `STACKS_RECIPIENT` updated to that deployment
+- a wallet on `Stacks testnet`
+- testnet STX
+- a deployed `autoscholar-payments.clar` contract
+- `.env` updated with the deployed contract principal and recipient
 
-## Secure Deployment
+Once configured, the live path is:
 
-To avoid storing a real mnemonic in `settings/Testnet.toml`, use the one-shot deployment helper:
+1. create a research task
+2. receive quote and x402 challenge metadata
+3. sign `pay-invoice`
+4. wait for Hiro confirmation
+5. verify payment server-side
+6. unlock the specialist bundle and final outputs
 
-```bash
-./scripts/deploy-testnet.sh
-```
+## Tests
 
-It will:
-- load `STACKS_DEPLOYER_MNEMONIC` from `.env` if present
-- use `STACKS_DEPLOYMENT_COST_STRATEGY` from `.env` if present, defaulting to `manual`
-- prompt for the deployer mnemonic without echoing it
-- create a temporary Clarinet settings file outside the repo workflow
-- generate and apply the testnet deployment
-- remove the temporary file when the command exits
-
-If you prefer shell-scoped secrets instead of an interactive prompt, you can also do:
+Run the contract and integration checks with:
 
 ```bash
-read -r -s STACKS_DEPLOYER_MNEMONIC
-export STACKS_DEPLOYER_MNEMONIC
-./scripts/deploy-testnet.sh
-unset STACKS_DEPLOYER_MNEMONIC
+npm test
 ```
 
-Implementation note:
-- The backend loads `.env` with `override: true` so stale shell-level keys do not shadow the intended TuZi credentials.
-- The TuZi LLM call is executed through `apps/backend/src/llm_tuzi.py`, which matches the verified Python request path for this environment.
+This runs:
 
-## Configuration
+- `clarinet check`
+- `vitest run tests/autoscholar-payments.test.ts`
 
-Environment variables:
+## Documentation Guide
 
-- `PORT`
-- `FRONTEND_ORIGIN`
-- `DEMO_PAYMENT_TOKEN`
-- `OPENAI_API_KEY`
-- `OPENAI_BASE_URL`
-- `OPENAI_API_STYLE`
-- `OPENAI_MODEL`
-- `LLM_TIMEOUT_MS`
-- `RESEARCH_TIMEOUT_MS`
-- `BACKEND_LOG_PATH`
-- `ALLOW_DEMO_PAYMENTS`
-- `STACKS_NETWORK`
-- `STACKS_API_BASE`
-- `STACKS_PAYMENT_ASSET`
-- `STACKS_PAYMENT_AMOUNT`
-- `STACKS_PAYMENT_MEMO_PREFIX`
-- `STACKS_CHALLENGE_TTL_SECONDS`
-- `STACKS_PAYMENT_CONTRACT`
-- `STACKS_RECIPIENT`
-
-Recommended local dev pairing for this repo:
-- `OPENAI_BASE_URL=https://api.tu-zi.com/v1`
-- `OPENAI_API_STYLE=chat-completions`
-- `OPENAI_MODEL=gpt-5.4`
-- `OPENAI_API_KEY=<your TuZi API key>`
-
-If your provider exposes the OpenAI `responses` API instead of `chat/completions`, set:
-- `OPENAI_BASE_URL=<provider /v1 base>` and `OPENAI_API_STYLE=responses`
-- or point `OPENAI_BASE_URL` directly at the full `/responses` endpoint
-
-Recommended timeout floor for slower GPT-5.x research runs:
-- `LLM_TIMEOUT_MS=60000`
-- `RESEARCH_TIMEOUT_MS=300000`
-
-Backend logs:
-- default path is `logs/backend.log`
-- each line is JSON, intended for error forensics rather than frontend display
+- [GUIDE.md](/Users/jiahuaiyu/develop/hackthon/x402-research/GUIDE.md): submission framing and presenter notes
+- [PROJECT.md](/Users/jiahuaiyu/develop/hackthon/x402-research/PROJECT.md): internal scope and roadmap
+- [docs/architecture.md](/Users/jiahuaiyu/develop/hackthon/x402-research/docs/architecture.md): system architecture
+- [docs/demo.md](/Users/jiahuaiyu/develop/hackthon/x402-research/docs/demo.md): demo runbook
+- [docs/clarity-contract.md](/Users/jiahuaiyu/develop/hackthon/x402-research/docs/clarity-contract.md): contract notes
+- [tests/README.md](/Users/jiahuaiyu/develop/hackthon/x402-research/tests/README.md): test coverage notes
 
 ## Current Status
 
-Implemented:
-- frontend dashboard
-- backend orchestration API
-- arXiv paper search
-- x402 challenge flow with Stacks settlement metadata
-- real wallet contract-call path in the frontend
-- Hiro-backed transaction verification in the backend
-- payment readiness diagnostics for `.env` and contract deployment
-- OpenAI-compatible summarization through backend-native fetch requests to the configured provider
+What is real today:
 
-Still simulated / pending:
-- real PDF-native diagram extraction
-- persistent storage
-- multi-specialist routing
+- frontend task intake and workflow UI
+- x402-style challenge creation
+- task tree and commerce trace packaging
+- Stacks testnet payment signing
+- Hiro-backed verification
+- markdown plus JSON output bundle
+
+What is still a next step:
+
+- separate deployable specialist molbots
+- non-STX settlement rails such as sBTC or USDCx
+- registry and discovery between independent molbots
+- persistent storage and production operations
