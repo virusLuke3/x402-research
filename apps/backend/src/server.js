@@ -23,7 +23,11 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 8787;
-const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || 'http://localhost:5173';
+const DEFAULT_FRONTEND_ORIGINS = ['http://localhost:5173', 'http://127.0.0.1:5173'];
+const FRONTEND_ORIGINS = (process.env.FRONTEND_ORIGINS || process.env.FRONTEND_ORIGIN || DEFAULT_FRONTEND_ORIGINS.join(','))
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 const DEMO_PAYMENT_TOKEN = process.env.DEMO_PAYMENT_TOKEN || 'demo-paid-token';
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
@@ -32,7 +36,14 @@ const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-5.4';
 const RESEARCH_PYTHON_BIN = process.env.RESEARCH_PYTHON_BIN || process.env.PYTHON_BIN || 'python3';
 const PAYMENT_AMOUNT = process.env.STACKS_PAYMENT_AMOUNT || '500000';
 
-app.use(cors({ origin: FRONTEND_ORIGIN }));
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || FRONTEND_ORIGINS.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error(`Origin ${origin} is not allowed by CORS`));
+  }
+}));
 app.use(express.json());
 app.use((req, res, next) => {
   const requestId = createRequestId();
