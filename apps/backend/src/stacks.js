@@ -170,13 +170,62 @@ export async function verifyStacksPayment({
   };
 }
 
-async function fetchStacksTransaction(txid) {
-  const { apiBase } = getStacksConfig();
-  const response = await fetch(`${apiBase}/extended/v1/tx/${txid}`);
-  if (!response.ok) {
-    throw new Error(`Hiro API returned ${response.status} for tx ${txid}`);
+export async function inspectStacksTransaction(txid, apiBase = getStacksConfig().apiBase) {
+  if (!txid) {
+    return {
+      ok: false,
+      txid: txid || null,
+      apiBase,
+      httpStatus: null,
+      tx: null,
+      status: null,
+      reason: 'missing txid',
+    };
   }
-  return response.json();
+
+  try {
+    const response = await fetch(`${apiBase}/extended/v1/tx/${txid}`);
+    if (!response.ok) {
+      return {
+        ok: false,
+        txid,
+        apiBase,
+        httpStatus: response.status,
+        tx: null,
+        status: null,
+        reason: `Hiro API returned ${response.status} for tx ${txid}`,
+      };
+    }
+
+    const tx = await response.json();
+    return {
+      ok: true,
+      txid,
+      apiBase,
+      httpStatus: response.status,
+      tx,
+      status: tx?.tx_status || null,
+      reason: null,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      txid,
+      apiBase,
+      httpStatus: null,
+      tx: null,
+      status: null,
+      reason: error.message || 'failed to inspect Stacks transaction',
+    };
+  }
+}
+
+async function fetchStacksTransaction(txid) {
+  const inspection = await inspectStacksTransaction(txid);
+  if (!inspection.ok) {
+    throw new Error(inspection.reason || `failed to inspect tx ${txid}`);
+  }
+  return inspection.tx;
 }
 
 export function parseStacksContractPrincipal(contractPrincipal) {

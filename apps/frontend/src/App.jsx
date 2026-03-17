@@ -413,14 +413,11 @@ export default function App() {
     };
   }
 
-  async function waitForTxSuccess(txid, apiBase, onUpdate) {
+  async function waitForTxSuccess(txid, onUpdate) {
     for (let attempt = 0; attempt < TX_POLL_MAX_ATTEMPTS; attempt += 1) {
-      const response = await fetch(`${apiBase}/extended/v1/tx/${txid}`);
-      if (!response.ok) {
-        throw new Error(`Failed to inspect transaction ${txid}`);
-      }
-      const tx = await response.json();
-      onUpdate?.(tx, attempt + 1);
+      const inspection = await request(`/api/stacks/tx/${encodeURIComponent(txid)}`);
+      const tx = inspection?.tx;
+      onUpdate?.(tx, attempt + 1, inspection);
       if (tx?.tx_status === 'success') {
         return tx;
       }
@@ -437,14 +434,10 @@ export default function App() {
     throw new Error('Timed out waiting for transaction confirmation');
   }
 
-  async function ensureContractDeployed(contractPrincipal, apiBase) {
-    const [address, contractName] = String(contractPrincipal || '').split('.');
-    if (!address || !contractName) {
-      throw new Error('Invalid Stacks contract principal');
-    }
-    const response = await fetch(`${apiBase}/v2/contracts/source/${address}/${contractName}`);
-    if (!response.ok) {
-      throw new Error('Stacks testnet contract is not deployed yet. Deploy autoscholar-payments and set STACKS_PAYMENT_CONTRACT first.');
+  async function ensureContractDeployed(contractPrincipal) {
+    const inspection = await request(`/api/stacks/contracts/${encodeURIComponent(contractPrincipal)}`);
+    if (!inspection?.deployed) {
+      throw new Error(inspection?.reason || 'Stacks testnet contract is not deployed yet. Deploy autoscholar-payments and set STACKS_PAYMENT_CONTRACT first.');
     }
   }
 
@@ -473,7 +466,7 @@ export default function App() {
         throw new Error('Stacks contract principal is not configured');
       }
 
-      await ensureContractDeployed(contractId, paymentRequest?.stacks?.apiBase || 'https://api.testnet.hiro.so');
+      await ensureContractDeployed(contractId);
       pushExecutionEvent(`Settlement contract ready: ${contractId}`, 'success');
 
       const postConditions = paymentRequest?.asset === 'STX'
@@ -507,7 +500,6 @@ export default function App() {
 
       await waitForTxSuccess(
         txResult.txid,
-        paymentRequest?.stacks?.apiBase || 'https://api.testnet.hiro.so',
         (tx, attempt) => {
           const tone = tx?.tx_status === 'success' ? 'success' : 'info';
           pushExecutionEvent(`Hiro poll #${attempt}: ${tx?.tx_status || 'unknown'}`, tone);

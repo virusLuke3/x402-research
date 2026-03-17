@@ -8,6 +8,8 @@ import {
   ALLOW_DEMO_PAYMENTS,
   buildStacksPaymentRequest,
   getStacksPaymentReadiness,
+  inspectStacksContract,
+  inspectStacksTransaction,
   isPaymentRequestExpired,
   verifyStacksPayment,
   STACKS_NETWORK,
@@ -95,6 +97,49 @@ app.get('/api/payment/readiness', async (_req, res) => {
   } catch (error) {
     logError('payment.readiness.failed', { error });
     return res.status(500).json({ error: error.message || 'failed to inspect payment readiness' });
+  }
+});
+
+app.get('/api/stacks/contracts/:contractPrincipal', async (req, res) => {
+  try {
+    const inspection = await inspectStacksContract(req.params.contractPrincipal, STACKS_API_BASE);
+    if (!inspection.ok) {
+      return res.status(400).json({ error: inspection.reason || 'invalid contract principal', contract: inspection });
+    }
+    return res.json(inspection);
+  } catch (error) {
+    logError('stacks.contract.inspect.failed', {
+      requestId: req.requestId,
+      contractPrincipal: req.params.contractPrincipal,
+      error,
+    });
+    return res.status(502).json({ error: error.message || 'failed to inspect contract deployment' });
+  }
+});
+
+app.get('/api/stacks/tx/:txid', async (req, res) => {
+  try {
+    const inspection = await inspectStacksTransaction(req.params.txid, STACKS_API_BASE);
+    if (!inspection.ok) {
+      logWarn('stacks.tx.inspect.failed', {
+        requestId: req.requestId,
+        txid: req.params.txid,
+        inspection,
+      });
+      return res.status(502).json({
+        error: inspection.reason || 'failed to inspect transaction',
+        txid: req.params.txid,
+        stacks: inspection,
+      });
+    }
+    return res.json(inspection);
+  } catch (error) {
+    logError('stacks.tx.inspect.crashed', {
+      requestId: req.requestId,
+      txid: req.params.txid,
+      error,
+    });
+    return res.status(502).json({ error: error.message || 'failed to inspect transaction' });
   }
 });
 
