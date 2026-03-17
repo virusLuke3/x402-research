@@ -28,6 +28,10 @@ const FRONTEND_ORIGINS = (process.env.FRONTEND_ORIGINS || process.env.FRONTEND_O
   .split(',')
   .map((origin) => origin.trim())
   .filter(Boolean);
+const FRONTEND_ORIGIN_PATTERNS = (process.env.FRONTEND_ORIGIN_PATTERNS || '')
+  .split(',')
+  .map((pattern) => pattern.trim())
+  .filter(Boolean);
 const DEMO_PAYMENT_TOKEN = process.env.DEMO_PAYMENT_TOKEN || 'demo-paid-token';
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
@@ -36,9 +40,22 @@ const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-5.4';
 const RESEARCH_PYTHON_BIN = process.env.RESEARCH_PYTHON_BIN || process.env.PYTHON_BIN || 'python3';
 const PAYMENT_AMOUNT = process.env.STACKS_PAYMENT_AMOUNT || '500000';
 
+function matchesOriginPattern(origin, pattern) {
+  const regex = new RegExp(`^${pattern
+    .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
+    .replace(/\*/g, '.*')}$`);
+  return regex.test(origin);
+}
+
+function isAllowedOrigin(origin) {
+  if (!origin) return true;
+  if (FRONTEND_ORIGINS.includes(origin)) return true;
+  return FRONTEND_ORIGIN_PATTERNS.some((pattern) => matchesOriginPattern(origin, pattern));
+}
+
 app.use(cors({
   origin(origin, callback) {
-    if (!origin || FRONTEND_ORIGINS.includes(origin)) {
+    if (isAllowedOrigin(origin)) {
       return callback(null, true);
     }
     return callback(new Error(`Origin ${origin} is not allowed by CORS`));
