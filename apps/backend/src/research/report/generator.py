@@ -75,9 +75,9 @@ class ReportGenerator:
     def _build_stable_markdown(self, topic: str, topic_profile: dict, evidence_bundle: dict, parliament_result: dict, citations: list[dict]) -> str:
         source_summary = self._build_source_summary(evidence_bundle.get("topicEvidence", []))
         evidence_stats = self._build_evidence_stats(evidence_bundle.get("topicEvidence", []))
-        executive_summary = self._flatten_text(parliament_result.get("executiveSummary")) or f"围绕 {topic} 的文献已完成结构化综合。"
-        methodology = self._flatten_text(parliament_result.get("methodology")) or f"围绕 {topic_profile.get('label', '当前主题')} 检索并筛选 arXiv + OpenReview 多源证据。"
-        consensus = self._flatten_text(parliament_result.get("consensus")) or "当前证据已形成有限共识，但仍应保留边界意识。"
+        executive_summary = self._flatten_text(parliament_result.get("executiveSummary")) or f"The available literature on {topic} has been synthesized into a structured evidence summary."
+        methodology = self._flatten_text(parliament_result.get("methodology")) or f"Multi-source retrieval and filtering across arXiv and OpenReview for {topic_profile.get('label', 'the current topic')}."
+        consensus = self._flatten_text(parliament_result.get("consensus")) or "The current evidence supports a limited consensus, but important boundaries and uncertainties remain."
         key_findings = self._normalize_bullets(parliament_result.get("keyFindings"))
         implications = self._normalize_bullets(parliament_result.get("implications"))
         limitations = self._normalize_bullets(parliament_result.get("limitations"))
@@ -86,37 +86,37 @@ class ReportGenerator:
         paper_count = sum(1 for item in evidence_bundle.get("topicEvidence", []) if item.get("sourceType") in {"arxiv", "openreview"})
 
         sections = [
-            f"# 研究报告：{topic}",
+            f"# Research Report: {topic}",
             "",
-            "## 1. 执行摘要",
+            "## 1. Executive Summary",
             executive_summary,
             "",
-            "## 2. 研究范围与方法",
+            "## 2. Scope and Method",
             methodology,
             "",
-            "## 3. 证据概览",
-            f"- 论文证据数量：{paper_count}",
-            f"- 报告门槛：至少 {self.config.minimum_paper_count} 篇论文",
-            f"- arXiv：{source_summary.get('arxiv', 0)}",
-            f"- OpenReview：{source_summary.get('openreview', 0)}",
-            f"- topic-core：{evidence_stats.get('topic-core', 0)}",
-            f"- supporting：{evidence_stats.get('supporting', 0)}",
+            "## 3. Evidence Overview",
+            f"- Paper evidence count: {paper_count}",
+            f"- Minimum report threshold: {self.config.minimum_paper_count} papers",
+            f"- arXiv: {source_summary.get('arxiv', 0)}",
+            f"- OpenReview: {source_summary.get('openreview', 0)}",
+            f"- topic-core: {evidence_stats.get('topic-core', 0)}",
+            f"- supporting: {evidence_stats.get('supporting', 0)}",
             "",
-            "## 4. 核心发现",
+            "## 4. Key Findings",
         ]
-        sections.extend(f"- {item}" for item in key_findings or ["当前自动综合未提炼出稳定的核心发现。"])
-        sections.extend(["", "## 5. 影响与启示"])
-        sections.extend(f"- {item}" for item in implications or ["当前更适合把本报告视为研究线索地图，而不是最终定论。"])
-        sections.extend(["", "## 6. 当前共识"])
+        sections.extend(f"- {item}" for item in key_findings or ["No stable cross-source findings were extracted by the current synthesis pass."])
+        sections.extend(["", "## 5. Implications"])
+        sections.extend(f"- {item}" for item in implications or ["This report is best treated as an evidence map rather than a final conclusion."])
+        sections.extend(["", "## 6. Working Consensus"])
         sections.append(consensus)
-        sections.extend(["", "## 7. 局限性"])
-        sections.extend(f"- {item}" for item in limitations or ["当前结论主要依赖标题、摘要和结构化 agent 输出，仍需更细粒度全文审查。"])
-        sections.extend(["", "## 8. 后续研究方向"])
-        sections.extend(f"- {item}" for item in next_actions or ["补充全文下载与细粒度证据聚类。"])
+        sections.extend(["", "## 7. Limitations"])
+        sections.extend(f"- {item}" for item in limitations or ["The current synthesis relies heavily on titles, abstracts, and structured agent output, so deeper full-text review is still needed."])
+        sections.extend(["", "## 8. Next Research Actions"])
+        sections.extend(f"- {item}" for item in next_actions or ["Add full-text retrieval and finer-grained evidence clustering."])
         if parliament_notes:
-            sections.extend(["", "## 9. Agent 协同摘要"])
+            sections.extend(["", "## 9. Agent Deliberation Notes"])
             sections.extend(f"- {item}" for item in parliament_notes)
-        sections.extend(["", "## 10. 参考文献"])
+        sections.extend(["", "## 10. References"])
         sections.extend(
             f"{idx + 1}. [{item['title']}]({item['url']}) — {item['published']}"
             for idx, item in enumerate(citations[: self.config.report_citation_limit])
@@ -131,22 +131,22 @@ class ReportGenerator:
         limitations = self._normalize_bullets(parliament_result.get("limitations"))
         next_actions = self._normalize_bullets(parliament_result.get("nextResearchActions"))
         sections = [
-            f"# 研究报告：{topic}",
+            f"# Research Report: {topic}",
             "",
-            "## 1. 执行摘要",
-            executive_summary or f"围绕 {topic} 的文献已完成初步综合。",
+            "## 1. Executive Summary",
+            executive_summary or f"A preliminary literature synthesis has been completed for {topic}.",
             "",
-            "## 2. 研究范围与方法",
-            methodology or f"围绕 {topic_profile.get('label', '当前主题')} 检索并筛选 arXiv + OpenReview 多源证据。",
+            "## 2. Scope and Method",
+            methodology or f"Multi-source retrieval and filtering across arXiv and OpenReview for {topic_profile.get('label', 'the current topic')}.",
             "",
-            "## 3. 核心发现",
+            "## 3. Key Findings",
         ]
         sections.extend(f"- {item}" for item in key_findings)
-        sections.extend(["", "## 4. 局限性"])
+        sections.extend(["", "## 4. Limitations"])
         sections.extend(f"- {item}" for item in limitations)
-        sections.extend(["", "## 5. 后续研究方向"])
+        sections.extend(["", "## 5. Next Research Actions"])
         sections.extend(f"- {item}" for item in next_actions)
-        sections.extend(["", "## 6. 参考文献"])
+        sections.extend(["", "## 6. References"])
         sections.extend(
             f"{idx + 1}. [{item['title']}]({item['url']}) — {item['published']}"
             for idx, item in enumerate(citations[: self.config.report_citation_limit])

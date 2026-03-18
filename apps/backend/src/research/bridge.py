@@ -356,41 +356,41 @@ def build_fallback_report(topic: str, research_mode: str, topic_profile: dict, e
 
     source_summary = build_source_summary(evidence)
     markdown_sections = [
-        f"# 研究报告：{topic}",
+        f"# Research Report: {topic}",
         "",
-        "## 1. 执行摘要",
+        "## 1. Executive Summary",
         (
-            f"围绕“{topic}”已完成 arXiv + OpenReview 多源检索与筛选。"
-            f"本次回退报告基于前 {min(len(evidence), config.report_citation_limit)} 条核心证据生成，原因是在线 LLM 调用失败。"
+            f"Multi-source retrieval and filtering across arXiv and OpenReview completed for '{topic}'. "
+            f"This fallback report was generated from the top {min(len(evidence), config.report_citation_limit)} evidence items because the online LLM synthesis step failed."
         ),
         "",
-        "## 2. 研究范围与方法",
+        "## 2. Scope and Method",
         (
-            "采用 multi-source retrieval (arXiv + OpenReview) -> relevance filtering -> evidence ranking "
-            f"-> fallback synthesis 的流程，并要求至少 {config.minimum_paper_count} 篇论文证据才进入报告生成。"
+            "The pipeline uses multi-source retrieval (arXiv + OpenReview) -> relevance filtering -> evidence ranking "
+            f"-> fallback synthesis, and requires at least {config.minimum_paper_count} paper records before long-form report generation."
         ),
         "",
-        "## 3. 证据来源概览",
+        "## 3. Source Overview",
         f"- arXiv: {source_summary.get('arxiv', 0)}",
         f"- OpenReview: {source_summary.get('openreview', 0)}",
         f"- Local frameworks: {source_summary.get('local-framework', 0)}",
         "",
-        "## 4. 核心证据",
+        "## 4. Core Evidence",
     ]
     markdown_sections.extend(f"- {title}" for title in top_titles)
     markdown_sections.extend(
         [
             "",
-            "## 5. 初步判断",
-            f"- 当前主题被识别为 `{topic_profile.get('label', research_mode)}`。",
-            f"- 当前纳入综合的证据数量为 {len(evidence)} 条，其中论文证据至少为 {sum(1 for item in evidence if item.get('sourceType') in {'arxiv', 'openreview'})} 篇。",
-            "- 当前报告为兜底版本，因此更偏向结构化综述，不包含完整的议会式长文综合。",
+            "## 5. Provisional Assessment",
+            f"- The topic is currently classified as `{topic_profile.get('label', research_mode)}`.",
+            f"- The current synthesis includes {len(evidence)} evidence records, including at least {sum(1 for item in evidence if item.get('sourceType') in {'arxiv', 'openreview'})} paper records.",
+            "- This is a fallback report, so it emphasizes structured synthesis rather than the full parliament-style long-form write-up.",
             "",
-            "## 6. 局限性",
-            "- 在线模型调用失败，因此未完成完整的多 Agent 讨论与长文写作。",
-            "- 当前结论主要基于标题、摘要与多源排序，尚未下载全文做更细粒度审查。",
+            "## 6. Limitations",
+            "- The online model call failed, so the full multi-agent discussion and long-form writing pass did not complete.",
+            "- The current conclusions rely mainly on titles, abstracts, and ranked evidence rather than deeper full-text review.",
             "",
-            "## 7. 参考文献",
+            "## 7. References",
         ]
     )
     markdown_sections.extend(
@@ -401,18 +401,18 @@ def build_fallback_report(topic: str, research_mode: str, topic_profile: dict, e
 
     return {
         "mode": "python-fallback",
-        "executiveSummary": f"围绕 {topic} 已完成多源抓取与筛选，但最终长文报告因模型调用失败而回退。",
+        "executiveSummary": f"Multi-source retrieval and filtering completed for {topic}, but the long-form report fell back because the model synthesis step failed.",
         "researchQuestion": topic,
         "methodology": "Python research pipeline over arXiv + OpenReview retrieval, relevance filtering, agent debate, and fallback synthesis.",
         "keyFindings": top_titles[:5],
-        "implications": ["多源检索与筛选流程已可用。", "报告质量仍取决于在线模型与 agent 讨论链路。"],
-        "limitations": ["未完成完整 LLM parliament 综合。", error_message],
+        "implications": ["The multi-source retrieval and filtering pipeline is operational.", "Final report quality still depends on the online model and the downstream agent deliberation path."],
+        "limitations": ["The full LLM parliament synthesis did not complete.", error_message],
         "noveltyAssessment": "Medium",
-        "consensus": "当前流程已具备 arXiv + OpenReview 双源检索能力，但高质量写作仍依赖可用的在线模型。",
+        "consensus": "The current pipeline can retrieve from both arXiv and OpenReview, but high-quality long-form writing still depends on a working online model.",
         "nextResearchActions": [
-            "恢复可用的模型额度与稳定性。",
-            "在 40+ 篇论文证据基础上重新触发议会式综合。",
-            "后续可加入 PDF 下载后的全文审查与证据聚类。",
+            "Restore stable model availability and retry the synthesis pass.",
+            "Re-run parliament-style synthesis once 40+ paper records are available.",
+            "Add full-text PDF review and evidence clustering in a later iteration.",
         ],
         "scenarios": [],
         "timeline": [],

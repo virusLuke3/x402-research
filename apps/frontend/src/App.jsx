@@ -1,17 +1,34 @@
 import { useEffect, useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { request as walletRequest } from '@stacks/connect';
-import { Cl, Pc } from '@stacks/transactions';
 
 const API_BASE = import.meta.env.VITE_API_BASE || '';
 const STACKS_NETWORK = 'testnet';
 const TX_POLL_INTERVAL_MS = 4000;
 const TX_POLL_MAX_ATTEMPTS = 40;
+const TX_POLL_MAX_TRANSIENT_ERRORS = 4;
+const INITIAL_READINESS_DELAY_MS = 800;
 const TX_EXPLORER_BASE = 'https://explorer.hiro.so/txid';
+
+let stacksClientPromise = null;
+
+async function loadStacksClient() {
+  if (!stacksClientPromise) {
+    stacksClientPromise = Promise.all([
+      import('@stacks/connect'),
+      import('@stacks/transactions')
+    ]).then(([connectModule, transactionsModule]) => ({
+      walletRequest: connectModule.request,
+      Cl: transactionsModule.Cl,
+      Pc: transactionsModule.Pc
+    }));
+  }
+  return stacksClientPromise;
+}
 
 async function request(path, options = {}) {
   const response = await fetch(`${API_BASE}${path}`, {
+    cache: 'no-store',
     headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
     ...options
   });
@@ -277,18 +294,45 @@ export default function App() {
   const [walletStatus, setWalletStatus] = useState('disconnected');
   const [paymentReadiness, setPaymentReadiness] = useState(null);
   const [readinessLoading, setReadinessLoading] = useState(false);
+  const [readinessInitialized, setReadinessInitialized] = useState(false);
   const [executionLog, setExecutionLog] = useState([]);
   const [paymentTxid, setPaymentTxid] = useState('');
   const [verificationDetails, setVerificationDetails] = useState(null);
   const [backendWorkflowPending, setBackendWorkflowPending] = useState(false);
 
   useEffect(() => {
-    refreshPaymentReadiness({ silent: false }).catch(() => undefined);
+    let cancelled = false;
+    let timeoutId = null;
+    let idleId = null;
+
+    const triggerReadinessCheck = () => {
+      if (cancelled) return;
+      setReadinessInitialized(true);
+      refreshPaymentReadiness({ silent: true }).catch(() => undefined);
+    };
+
+    const scheduleCheck = () => {
+      timeoutId = window.setTimeout(triggerReadinessCheck, INITIAL_READINESS_DELAY_MS);
+    };
+
+    if ('requestIdleCallback' in window) {
+      idleId = window.requestIdleCallback(scheduleCheck, { timeout: 2000 });
+    } else {
+      scheduleCheck();
+    }
+
+    return () => {
+      cancelled = true;
+      if (timeoutId) window.clearTimeout(timeoutId);
+      if (idleId && 'cancelIdleCallback' in window) {
+        window.cancelIdleCallback(idleId);
+      }
+    };
   }, []);
 
   useEffect(() => {
     if (!job?.id) return undefined;
-    if (!(backendWorkflowPending || (job.status === 'processing' && !job.report))) return undefined;
+    if (!(backendWorkflowPending || job.status === 'preparing' || (job.status === 'processing' && !job.report))) return undefined;
 
     let cancelled = false;
     const timer = window.setInterval(async () => {
@@ -296,7 +340,10 @@ export default function App() {
         const latest = await request(`/api/jobs/${job.id}`);
         if (cancelled) return;
         setJob(latest);
-        if (latest?.report) {
+        if (latest?.status === 'failed' && latest?.error) {
+          setError(latest.error);
+        }
+        if (latest?.report || latest?.status === 'failed') {
           setBackendWorkflowPending(false);
         }
       } catch {
@@ -350,11 +397,15 @@ export default function App() {
     try {
       const created = await request('/api/research', {
         method: 'POST',
-        body: JSON.stringify({ topic })
+        body: JSON.stringify({ topic, outputLanguage: 'English' })
       });
       setJob(created);
-      pushExecutionEvent(`Pre-payment evidence pack ready: ${created?.papers?.length || 0} sources prepared`, 'success');
-      pushExecutionEvent('x402 parent invoice created. Verified payment will release the specialist molbot bundle.', 'muted');
+      if (created?.status === 'preparing') {
+        pushExecutionEvent('Task accepted. The manager molbot is preparing evidence and assembling the payment quote.', 'info');
+      } else {
+        pushExecutionEvent(`Pre-payment evidence pack ready: ${created?.papers?.length || 0} sources prepared`, 'success');
+        pushExecutionEvent('x402 parent invoice created. Verified payment will release the specialist molbot bundle.', 'muted');
+      }
     } catch (err) {
       const message = formatErrorMessage(err);
       setError(message);
@@ -365,6 +416,7 @@ export default function App() {
   }
 
   async function connectWallet(forceWalletSelect = true) {
+    const { walletRequest } = await loadStacksClient();
     const response = await walletRequest(
       { forceWalletSelect, persistWalletSelect: true, enableLocalStorage: true },
       'stx_getAddresses',
@@ -394,7 +446,8 @@ export default function App() {
     }
   }
 
-  function buildContractCallArgs(paymentRequest) {
+  async function buildContractCallArgs(paymentRequest) {
+    const { Cl } = await loadStacksClient();
     const args = paymentRequest?.clarity?.expectedArgs || [];
     return args.map((arg) => {
       if (arg.name === 'recipient') return Cl.standardPrincipal(String(arg.value));
@@ -414,20 +467,30 @@ export default function App() {
   }
 
   async function waitForTxSuccess(txid, onUpdate) {
+    let transientErrors = 0;
     for (let attempt = 0; attempt < TX_POLL_MAX_ATTEMPTS; attempt += 1) {
-      const inspection = await request(`/api/stacks/tx/${encodeURIComponent(txid)}`);
-      const tx = inspection?.tx;
-      onUpdate?.(tx, attempt + 1, inspection);
-      if (tx?.tx_status === 'success') {
-        return tx;
-      }
-      if (
-        tx?.tx_status &&
-        tx.tx_status !== 'pending' &&
-        tx.tx_status !== 'pending_anchor_block' &&
-        tx.tx_status !== 'pending_microblock'
-      ) {
-        throw new Error(`Transaction failed: ${tx.tx_status}`);
+      try {
+        const inspection = await request(`/api/stacks/tx/${encodeURIComponent(txid)}`);
+        const tx = inspection?.tx;
+        transientErrors = 0;
+        onUpdate?.(tx, attempt + 1, inspection);
+        if (tx?.tx_status === 'success') {
+          return tx;
+        }
+        if (
+          tx?.tx_status &&
+          tx.tx_status !== 'pending' &&
+          tx.tx_status !== 'pending_anchor_block' &&
+          tx.tx_status !== 'pending_microblock'
+        ) {
+          throw new Error(`Transaction failed: ${tx.tx_status}`);
+        }
+      } catch (error) {
+        transientErrors += 1;
+        onUpdate?.({ tx_status: `poll_error_${transientErrors}` }, attempt + 1, { ok: false, reason: error?.message || 'fetch failed' });
+        if (transientErrors > TX_POLL_MAX_TRANSIENT_ERRORS) {
+          throw error;
+        }
       }
       await new Promise((resolve) => window.setTimeout(resolve, TX_POLL_INTERVAL_MS));
     }
@@ -449,6 +512,12 @@ export default function App() {
     setPaymentTxid('');
 
     try {
+      const latestJob = await request(`/api/jobs/${job.id}`);
+      setJob(latestJob);
+      if (latestJob?.status !== 'awaiting-payment' || !latestJob?.paymentRequest) {
+        throw new Error('Payment quote is still being prepared. Wait for the task to reach awaiting payment.');
+      }
+
       const readiness = await refreshPaymentReadiness({ silent: true });
       if (readiness?.missing?.length) {
         throw new Error(`Payment rail is not ready: missing ${readiness.missing.join(', ')}`);
@@ -460,8 +529,8 @@ export default function App() {
       const sender = walletAddress || await connectWallet(false).catch(() => connectWallet(true));
       pushExecutionEvent(`Using sender ${shortAddress(sender)} on ${STACKS_NETWORK} for the parent invoice`, 'info');
 
-      const paymentRequest = job.paymentRequest;
-      const contractId = paymentRequest?.clarity?.contractPrincipal;
+      const paymentRequest = latestJob.paymentRequest;
+      const contractId = paymentRequest?.clarity?.contractPrincipal || paymentRequest?.stacks?.contract;
       if (!contractId || !contractId.includes('.')) {
         throw new Error('Stacks contract principal is not configured');
       }
@@ -469,6 +538,7 @@ export default function App() {
       await ensureContractDeployed(contractId);
       pushExecutionEvent(`Settlement contract ready: ${contractId}`, 'success');
 
+      const { walletRequest, Pc } = await loadStacksClient();
       const postConditions = paymentRequest?.asset === 'STX'
         ? [Pc.principal(sender).willSendEq(BigInt(String(paymentRequest.amount))).ustx()]
         : [];
@@ -482,7 +552,7 @@ export default function App() {
         {
           contract: contractId,
           functionName: paymentRequest?.clarity?.publicFunction || 'pay-invoice',
-          functionArgs: buildContractCallArgs(paymentRequest),
+          functionArgs: await buildContractCallArgs(paymentRequest),
           network: STACKS_NETWORK,
           postConditions,
           postConditionMode: 'deny',
@@ -552,9 +622,12 @@ export default function App() {
 
   const reportMarkdown = job?.report?.markdown?.trim();
   const hasReport = Boolean(job?.report);
+  const reportTitle = job?.report?.title || 'Research Dossier';
   const paymentStatus = job?.paymentReceipt
     ? 'paid'
     : backendWorkflowPending
+      ? 'processing'
+    : job?.status === 'preparing'
       ? 'processing'
     : job?.status === 'awaiting-payment'
       ? 'pending'
@@ -569,12 +642,20 @@ export default function App() {
   const network = paymentReadiness?.network || job?.paymentRequest?.stacks?.network || STACKS_NETWORK;
   const txExplorerUrl = buildExplorerTxUrl(paymentTxid || job?.paymentReceipt?.txid, network);
   const canPay = Boolean(job?.status === 'awaiting-payment');
+  const paymentReadyToSign = Boolean(canPay && (job?.paymentRequest?.clarity?.contractPrincipal || job?.paymentRequest?.stacks?.contract));
   const walletReady = walletStatus === 'connected' && walletAddress;
   const serviceBundleCount = job?.serviceManifest?.length || 0;
   const outputCount = job?.outputs?.items?.length || 0;
   const unlockLabel = walletReady
     ? `Sign & Pay ${displayAmount} to Unlock Specialist Bundle`
     : `Connect Leather Wallet`;
+  const readinessStatusLabel = !readinessInitialized && !paymentReadiness
+    ? 'Checking settlement...'
+    : readinessLoading && !paymentReadiness
+      ? 'Checking settlement...'
+      : paymentReadiness?.ok
+        ? 'Settlement ready'
+        : 'Setup required';
 
   const terminalEntries = useMemo(() => {
     const entries = [...executionLog];
@@ -599,6 +680,14 @@ export default function App() {
       entries.push({
         id: 'job-processing',
         message: 'Backend is running paid specialists and packaging dossier plus JSON handoff outputs.',
+        tone: 'info'
+      });
+    }
+
+    if (job?.status === 'preparing') {
+      entries.push({
+        id: 'job-preparing',
+        message: 'Manager molbot is retrieving evidence and preparing the x402 quote. This can take around 1-2 minutes.',
         tone: 'info'
       });
     }
@@ -638,23 +727,40 @@ export default function App() {
     return entries;
   }, [backendWorkflowPending, displayAmount, executionLog, hasReport, job]);
 
+  async function refreshCurrentJob() {
+    if (!job?.id) return;
+    setError('');
+    try {
+      const latest = await request(`/api/jobs/${job.id}`);
+      setJob(latest);
+      pushExecutionEvent(
+        latest?.report ? 'Latest completed report state loaded from the backend.' : `Job state refreshed: ${latest?.status || 'unknown'}`,
+        latest?.report ? 'success' : 'info'
+      );
+    } catch (err) {
+      const message = formatErrorMessage(err);
+      setError(message);
+      pushExecutionEvent(message, 'error');
+    }
+  }
+
   return (
     <div className="appShell">
       <header className="topRail">
         <div className="brandCluster">
           <div className="brandSticker">
             <span>AutoScholar</span>
-            <span>Get Paid / Get Signal</span>
+            <span>Research Commerce</span>
           </div>
           <div className="brandCopy">
             <p className="appEyebrow">x402 / Stacks Research Network</p>
-            <h2>Specialized research molbots for agentic commerce</h2>
+            <h2>English research reports with verified payment release</h2>
           </div>
         </div>
         <div className="topRailActions">
           <div className={`topPill ${paymentReadiness?.ok ? 'topPillLive' : ''}`}>
             <span className="topPillDot" />
-            {paymentReadiness?.ok ? 'Settlement ready' : 'Setup required'}
+            {readinessStatusLabel}
           </div>
           <div className="topPill">{walletAddress ? shortAddress(walletAddress) : 'Wallet idle'}</div>
           <button
@@ -664,6 +770,16 @@ export default function App() {
           >
             Create Task
           </button>
+          {job?.id ? (
+            <button
+              type="button"
+              className="topButton"
+              onClick={refreshCurrentJob}
+              disabled={loading}
+            >
+              Refresh Job
+            </button>
+          ) : null}
           <button
             type="button"
             className="topButton topButtonAccent"
@@ -677,12 +793,25 @@ export default function App() {
 
       <section className="heroPanel">
         <div className="heroCopy">
-          <p className="heroEyebrow">Specialized Skill Molbot</p>
-          <h1>Quote premium research workflows, settle with x402, export outputs other agents can reuse.</h1>
+          <p className="heroEyebrow">Research Workspace</p>
+          <h1>Commission a topic, verify payment, and unlock an English report plus handoff artifacts.</h1>
           <p className="heroLead">
-            AutoScholar turns deep research into a commerce primitive. A manager molbot scopes the task, x402 issues a parent invoice,
-            Stacks verifies settlement, then the system unlocks paid specialists and packages human-readable plus machine-readable deliverables.
+            AutoScholar keeps the workflow simple: scope the question, prepare evidence, verify settlement on Stacks, and then deliver a polished English dossier with machine-readable supporting outputs.
           </p>
+          <div className="heroHighlights">
+            <div className="heroHighlight">
+              <strong>English-only output</strong>
+              <span>Final dossier and markdown report are generated in English.</span>
+            </div>
+            <div className="heroHighlight">
+              <strong>Visible lifecycle</strong>
+              <span>You can see whether the system is scoping, awaiting payment, verifying, or writing.</span>
+            </div>
+            <div className="heroHighlight">
+              <strong>Reusable assets</strong>
+              <span>Outputs include a human-readable report and structured handoff packets for downstream agents.</span>
+            </div>
+          </div>
           <div className="heroActionRow">
             <button
               type="button"
@@ -711,21 +840,22 @@ export default function App() {
         </div>
         <aside className="heroAside">
           <div className="quoteCard">
-            <p className="traceEyebrow">Parent Invoice</p>
+            <p className="traceEyebrow">Bundle Snapshot</p>
             <div className="quoteAmount">{displayAmount}</div>
             <div className="quoteMeta">
-              <span>Bundle size: {serviceBundleCount || 4} paid services</span>
+              <span>Job: {job?.id ? shortAddress(job.id) : 'No active job yet'}</span>
+              <span>Bundle: {serviceBundleCount || 4} paid specialist services</span>
               <span>Outputs: {outputCount || 3} deliverables</span>
               <span>Status: {job?.status ? String(job.status).replaceAll('_', ' ') : 'idle'}</span>
             </div>
-            <button
-              type="button"
-              className="heroButton heroButtonPrimary quoteButton"
-              onClick={walletReady ? payAndComplete : handleConnectWallet}
-              disabled={loading || (!job && walletReady)}
-            >
-              {canPay ? unlockLabel : walletAddress ? 'Create task to quote bundle' : 'Connect wallet to settle'}
-            </button>
+              <button
+                type="button"
+                className="heroButton heroButtonPrimary quoteButton"
+                onClick={walletReady ? payAndComplete : handleConnectWallet}
+                disabled={loading || (!job && walletReady) || (walletReady && !paymentReadyToSign)}
+              >
+                {canPay ? unlockLabel : walletAddress ? 'Create task to quote bundle' : 'Connect wallet to settle'}
+              </button>
           </div>
           <div className="stickerCluster">
             <div className="microSticker">x402 VERIFIED</div>
@@ -739,8 +869,30 @@ export default function App() {
         <MetricCard label="Bundle Quote" value={displayAmount} detail="Single parent invoice on Stacks" tone="accent" />
         <MetricCard label="Evidence Prepared" value={`${job?.papers?.length || 0}`} detail="Pre-payment sources staged by the manager" />
         <MetricCard label="Paid Specialists" value={`${serviceBundleCount || 0}`} detail="Capabilities released after verified payment" />
-        <MetricCard label="Deliverables" value={`${outputCount || 0}`} detail="Markdown dossier + JSON handoff artifacts" tone="success" />
+        <MetricCard label="Deliverables" value={`${outputCount || 0}`} detail="English markdown dossier + JSON handoff artifacts" tone="success" />
       </section>
+
+      {reportMarkdown ? (
+        <section className="reportShowcase reportShowcaseFeatured">
+          <article className="reportCard">
+            <div className="reportHeader">
+              <div>
+                <p className="traceEyebrow">Premium Dossier</p>
+                <h3>{reportTitle}</h3>
+              </div>
+              <div className="reportActions">
+                <StatusPill status={job.status} />
+                <button type="button" className="secondaryButton reportRefreshButton" onClick={refreshCurrentJob} disabled={loading}>
+                  Refresh Result
+                </button>
+              </div>
+            </div>
+            <div className="markdownReport">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{reportMarkdown}</ReactMarkdown>
+            </div>
+          </article>
+        </section>
+      ) : null}
 
       <main className="dashboardLayout">
         <section className="dashboardColumn">
@@ -754,7 +906,7 @@ export default function App() {
             </div>
 
             <p className="cardCopy">
-              Write the job the way another agent would describe it: what needs to be investigated, what decision it should support, and what kind of output is expected.
+              Describe the question the way another agent would brief it: what should be investigated, what decision it should support, and what kind of deliverable is needed. The final report is generated in English.
             </p>
 
             <form onSubmit={createJob} className="queryForm">
@@ -763,9 +915,9 @@ export default function App() {
                 value={topic}
                 onChange={(event) => setTopic(event.target.value)}
                 rows={10}
-                placeholder="Describe the research task you want this molbot network to investigate..."
+                placeholder="Describe the research task you want this molbot network to investigate. Final report output will be in English..."
               />
-              <p className="inputHelper">You can enter any topic you want to learn about.</p>
+              <p className="inputHelper">You can enter any topic you want to learn about. We keep the final dossier in English even if the prompt itself is mixed-language.</p>
               <div className="formActionRow">
                 <button className="primaryButton" disabled={loading}>
                   {loading && !canPay ? 'Scoping...' : 'Create Molbot Task'}
@@ -859,7 +1011,7 @@ export default function App() {
               type="button"
               className="primaryButton primaryButtonWide"
               onClick={walletReady ? payAndComplete : handleConnectWallet}
-              disabled={loading || !job}
+              disabled={loading || !job || (walletReady && !paymentReadyToSign)}
             >
               {canPay ? unlockLabel : 'Create a molbot task before payment'}
             </button>
@@ -936,30 +1088,15 @@ export default function App() {
         </div>
       </section>
 
-      {(job?.status === 'processing' || backendWorkflowPending) && !hasReport ? (
+      {(job?.status === 'preparing' || job?.status === 'processing' || backendWorkflowPending) && !hasReport ? (
         <div className="processingBanner">
-          Paid specialists are running. The backend is packaging the dossier and agent handoff outputs.
+          {job?.status === 'preparing'
+            ? 'The manager molbot is preparing evidence and generating the payment quote.'
+            : 'Paid specialists are running. The backend is packaging the dossier and agent handoff outputs.'}
         </div>
       ) : null}
 
-      {reportMarkdown ? (
-        <section className="reportShowcase">
-          <article className="reportCard">
-            <div className="reportHeader">
-              <div>
-                <p className="traceEyebrow">Premium Dossier</p>
-                <h3>Research Dossier</h3>
-              </div>
-              <StatusPill status={job.status} />
-            </div>
-            <div className="markdownReport">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{reportMarkdown}</ReactMarkdown>
-            </div>
-          </article>
-        </section>
-      ) : null}
-
-      {!job ? null : !reportMarkdown && job.status !== 'processing' && job.status !== 'awaiting-payment' && !backendWorkflowPending ? (
+      {!job ? null : !reportMarkdown && job.status !== 'preparing' && job.status !== 'processing' && job.status !== 'awaiting-payment' && !backendWorkflowPending ? (
         <div className="placeholderState reportPlaceholder">No report output yet.</div>
       ) : null}
     </div>

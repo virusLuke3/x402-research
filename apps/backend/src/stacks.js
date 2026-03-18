@@ -183,41 +183,59 @@ export async function inspectStacksTransaction(txid, apiBase = getStacksConfig()
     };
   }
 
-  try {
-    const response = await fetch(`${apiBase}/extended/v1/tx/${txid}`);
-    if (!response.ok) {
-      return {
+  const attempts = 3;
+  let lastFailure = null;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      const response = await fetch(`${apiBase}/extended/v1/tx/${txid}`);
+      if (!response.ok) {
+        lastFailure = {
+          ok: false,
+          txid,
+          apiBase,
+          httpStatus: response.status,
+          tx: null,
+          status: null,
+          reason: `Hiro API returned ${response.status} for tx ${txid}`,
+        };
+      } else {
+        const tx = await response.json();
+        return {
+          ok: true,
+          txid,
+          apiBase,
+          httpStatus: response.status,
+          tx,
+          status: tx?.tx_status || null,
+          reason: null,
+        };
+      }
+    } catch (error) {
+      lastFailure = {
         ok: false,
         txid,
         apiBase,
-        httpStatus: response.status,
+        httpStatus: null,
         tx: null,
         status: null,
-        reason: `Hiro API returned ${response.status} for tx ${txid}`,
+        reason: error.message || 'failed to inspect Stacks transaction',
       };
     }
 
-    const tx = await response.json();
-    return {
-      ok: true,
-      txid,
-      apiBase,
-      httpStatus: response.status,
-      tx,
-      status: tx?.tx_status || null,
-      reason: null,
-    };
-  } catch (error) {
-    return {
-      ok: false,
-      txid,
-      apiBase,
-      httpStatus: null,
-      tx: null,
-      status: null,
-      reason: error.message || 'failed to inspect Stacks transaction',
-    };
+    if (attempt < attempts - 1) {
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+    }
   }
+
+  return lastFailure || {
+    ok: false,
+    txid,
+    apiBase,
+    httpStatus: null,
+    tx: null,
+    status: null,
+    reason: 'failed to inspect Stacks transaction',
+  };
 }
 
 async function fetchStacksTransaction(txid) {

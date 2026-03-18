@@ -145,6 +145,122 @@ app.get('/api/stacks/tx/:txid', async (req, res) => {
 
 const jobs = new Map();
 
+function buildPendingResearchJob(id, topic) {
+  return {
+    id,
+    topic,
+    searchQuery: null,
+    researchMode: null,
+    topicProfile: null,
+    paperSource: 'expanded arxiv topic evidence + internal frameworks',
+    papers: [],
+    paymentEvidence: [],
+    status: 'preparing',
+    createdAt: new Date().toISOString(),
+    orchestration: {
+      manager: 'Manager Molbot',
+      specialists: [],
+      identities: [],
+      meetingStatus: 'scoping'
+    },
+    paymentRequest: null,
+    serviceManifest: [],
+    taskTree: null,
+    commerceTrace: null,
+    outputs: null,
+    extractedAssets: [],
+    report: null,
+    contractState: null,
+    error: null
+  };
+}
+
+async function prepareResearchJob(job, requestId = null) {
+  try {
+    const preparedResearch = await retrieveEvidence(job.topic);
+    const researchMode = preparedResearch.researchMode || deriveResearchMode(job.topic);
+    const topicProfile = preparedResearch.topicProfile || deriveTopicProfile(job.topic);
+    const evidenceBundle = preparedResearch;
+    const stacksPayment = buildStacksPaymentRequest({ jobId: job.id, amount: PAYMENT_AMOUNT, asset: process.env.STACKS_PAYMENT_ASSET || 'STX' });
+    const clarityPayment = buildClarityPaymentSpec({
+      jobId: job.id,
+      recipient: stacksPayment.recipient,
+      amount: PAYMENT_AMOUNT,
+      asset: stacksPayment.asset,
+      memo: stacksPayment.memo,
+      contract: stacksPayment.contract,
+      paymentId: stacksPayment.paymentId,
+      expiresAt: stacksPayment.expiresAt,
+      nonce: stacksPayment.nonce
+    });
+    stacksPayment.clarity = clarityPayment;
+    const x402Challenge = buildX402Challenge({ jobId: job.id, amount: PAYMENT_AMOUNT, asset: stacksPayment.asset, paymentRequest: stacksPayment });
+
+    job.searchQuery = evidenceBundle.query;
+    job.researchMode = researchMode;
+    job.topicProfile = topicProfile;
+    job.papers = evidenceBundle.topicEvidence;
+    job.paymentEvidence = evidenceBundle.paymentEvidence;
+    job.status = 'awaiting-payment';
+    job.orchestration = {
+      manager: 'Manager Molbot',
+      specialists: [...topicProfile.specialistRoles.map((role) => role.agent), 'Image Extractor Molbot'],
+      identities: topicProfile.specialistRoles.map((role) => buildAgentIdentity(role, topicProfile)),
+      meetingStatus: 'scheduled'
+    };
+    job.paymentRequest = {
+      type: 'x402',
+      asset: stacksPayment.asset,
+      amount: PAYMENT_AMOUNT,
+      recipient: stacksPayment.recipient,
+      payer: stacksPayment.payer,
+      assetType: stacksPayment.assetType,
+      challenge: 'HTTP 402 Payment Required',
+      specialist: 'Image Extractor Molbot',
+      reason: 'Premium synthesis, AI Parliament debate, and extracted assets unlock after payment.',
+      stacks: stacksPayment,
+      clarity: clarityPayment,
+      x402: x402Challenge,
+      verificationPlan: buildClarityVerificationPlan({ ...stacksPayment, clarity: clarityPayment })
+    };
+    job.extractedAssets = [];
+    job.report = null;
+    job.error = null;
+
+    job.serviceManifest = buildServiceManifest(job);
+    job.taskTree = buildTaskTree(job, 'quote-issued');
+    job.commerceTrace = buildCommerceTrace(job, 'quote-issued');
+    job.outputs = buildOutputManifest(job);
+
+    seedContractInvoiceState({
+      jobId: job.id,
+      invoiceStatus: 'created',
+      paymentRequest: job.paymentRequest
+    });
+    job.contractState = await readContractInvoiceState({
+      jobId: job.id,
+      paymentRequest: job.paymentRequest
+    });
+
+    logInfo('research.prepare.success', {
+      requestId,
+      jobId: job.id,
+      topic: job.topic,
+      researchMode,
+      evidenceCount: evidenceBundle.topicEvidence?.length || 0,
+    });
+  } catch (error) {
+    job.status = 'failed';
+    job.error = error.message || 'failed to prepare research job';
+    logError('research.prepare.failed', {
+      requestId,
+      jobId: job.id,
+      topic: job.topic,
+      error,
+    });
+  }
+}
+
 const PAYMENT_RAIL = {
   challengeStandard: 'x402 / HTTP 402 Payment Required',
   settlementLayer: 'Stacks',
@@ -1099,7 +1215,7 @@ async function reviewReportPlan(topic, llmResult, plan, evidenceBundle) {
 }
 
 function buildFallbackMarkdownReport(topic, researchMode, topicProfile, evidenceBundle, llmResult, topicCitations) {
-  const title = `# AutoScholar ${researchMode === 'forecast' ? '预测研究报告' : '研究报告'}：${topic}`;
+  const title = `# AutoScholar ${researchMode === 'forecast' ? 'Forecast Dossier' : 'Research Dossier'}: ${topic}`;
   const evidenceRows = safeArray(evidenceBundle.topicEvidence, []).map((paper, index) => {
     const citation = topicCitations[index];
     const prefix = citation?.url ? `- **[${paper.title}](${citation.url})**` : `- **${paper.title}**`;
@@ -1111,85 +1227,85 @@ function buildFallbackMarkdownReport(topic, researchMode, topicProfile, evidence
     const titleLine = citation?.url ? `### ${index + 1}. [${paper.title}](${citation.url})` : `### ${index + 1}. ${paper.title}`;
     return [
       titleLine,
-      `- **作者 / 时间**：${[safeArray(paper.authors, []).join(', '), formatDate(paper.published)].filter(Boolean).join(' · ') || '未提供'}`,
-      `- **证据类型**：${paper.sourceType || 'unknown'} / ${paper.evidenceClass || 'unknown'}`,
-      `- **为什么重要**：${truncate(paper.summary, 380)}`,
-      `- **对本主题的启发**：${truncate((safeArray(llmResult.keyFindings, [])[index % Math.max(safeArray(llmResult.keyFindings, []).length, 1)] || llmResult.consensus || '该证据为当前主题提供了可直接借鉴的分析线索。'), 220)}`,
+      `- **Authors / Date**: ${[safeArray(paper.authors, []).join(', '), formatDate(paper.published)].filter(Boolean).join(' · ') || 'Not provided'}`,
+      `- **Evidence Type**: ${paper.sourceType || 'unknown'} / ${paper.evidenceClass || 'unknown'}`,
+      `- **Why It Matters**: ${truncate(paper.summary, 380)}`,
+      `- **Topic Relevance**: ${truncate((safeArray(llmResult.keyFindings, [])[index % Math.max(safeArray(llmResult.keyFindings, []).length, 1)] || llmResult.consensus || 'This evidence contributes a reusable analytical thread for the topic.'), 220)}`,
       ''
     ].join('\n');
   });
   const sections = [
     title,
     '',
-    '## 1. 执行摘要',
-    llmResult.executiveSummary || `围绕“${topic}”的当前证据已完成初步综合。`,
+    '## 1. Executive Summary',
+    llmResult.executiveSummary || `A preliminary synthesis of the current evidence for "${topic}" has been completed.`,
     '',
-    '## 2. 研究范围与方法',
-    llmResult.methodology || `基于 ${topicProfile.label} 的主题证据检索、筛选和综合分析。`,
+    '## 2. Scope and Method',
+    llmResult.methodology || `Topic-specific evidence retrieval, filtering, and synthesis for ${topicProfile.label}.`,
     '',
-    '## 3. 核心文献解析',
-    ...(evidenceHighlights.length ? evidenceHighlights : ['当前尚缺少足够高质量证据用于展开逐篇解析。']),
-    '## 4. 核心发现',
+    '## 3. Core Evidence Review',
+    ...(evidenceHighlights.length ? evidenceHighlights : ['There is not yet enough high-quality evidence to support a paper-by-paper review.']),
+    '## 4. Key Findings',
     ...safeArray(llmResult.keyFindings, []).map((item) => `- ${item}`),
     '',
-    '## 5. 技术综述 / 现状分析',
-    llmResult.consensus || '当前证据已支持形成初步综合判断，但仍需结合更多高质量外部论文继续扩展。',
+    '## 5. Synthesis and Current State',
+    llmResult.consensus || 'The current evidence supports a preliminary synthesis, but more high-quality external literature is still needed.',
     ''
   ];
 
   if (llmResult.domainSections?.vulnerabilityTaxonomy?.length) {
-    sections.push('## 5. 漏洞类别与缓解模式');
-    sections.push('### 5.1 漏洞类别');
+    sections.push('## 6. Vulnerability Classes and Mitigation Patterns');
+    sections.push('### 6.1 Vulnerability Classes');
     sections.push(...safeArray(llmResult.domainSections.vulnerabilityTaxonomy, []).map((item) => `- ${item}`));
     sections.push('');
     if (safeArray(llmResult.domainSections.mitigationPatterns, []).length) {
-      sections.push('### 5.2 缓解模式');
+      sections.push('### 6.2 Mitigation Patterns');
       sections.push(...safeArray(llmResult.domainSections.mitigationPatterns, []).map((item) => `- ${item}`));
       sections.push('');
     }
   }
 
   if (safeArray(llmResult.scenarios, []).length) {
-    sections.push('## 5. 情景分析');
-    sections.push(...safeArray(llmResult.scenarios, []).map((item) => `- **${item.name}**（${item.probability}）：${item.outlook} 驱动因素：${item.driver}`));
+    sections.push('## 6. Scenario Analysis');
+    sections.push(...safeArray(llmResult.scenarios, []).map((item) => `- **${item.name}** (${item.probability}): ${item.outlook} Driver: ${item.driver}`));
     sections.push('');
   }
 
   if (safeArray(llmResult.timeline, []).length) {
-    sections.push('## 6. 时间线判断');
-    sections.push(...safeArray(llmResult.timeline, []).map((item) => `- **${item.window}**：${item.expectation}`));
+    sections.push('## 7. Timeline');
+    sections.push(...safeArray(llmResult.timeline, []).map((item) => `- **${item.window}**: ${item.expectation}`));
     sections.push('');
   }
 
   if (safeArray(llmResult.implications, []).length) {
-    sections.push('## 7. 启示与建议');
+    sections.push('## 8. Implications and Recommendations');
     sections.push(...safeArray(llmResult.implications, []).map((item) => `- ${item}`));
     sections.push('');
   }
 
   if (evidenceRows.length) {
-    sections.push('## 9. 证据综述');
+    sections.push('## 9. Evidence Digest');
     sections.push(...evidenceRows);
     sections.push('');
   }
 
   if (safeArray(llmResult.limitations, []).length) {
-    sections.push('## 10. 局限性');
+    sections.push('## 10. Limitations');
     sections.push(...safeArray(llmResult.limitations, []).map((item) => `- ${item}`));
     sections.push('');
   }
 
   if (safeArray(llmResult.nextResearchActions, []).length) {
-    sections.push('## 11. 后续研究方向');
+    sections.push('## 11. Next Research Actions');
     sections.push(...safeArray(llmResult.nextResearchActions, []).map((item) => `- ${item}`));
     sections.push('');
   }
 
-  sections.push('## 12. 参考文献');
+  sections.push('## 12. References');
   if (topicCitations.length) {
     sections.push(...topicCitations.map((citation, index) => buildMarkdownReferenceLine(citation, index)));
   } else {
-    sections.push('当前没有可公开跳转的外部参考文献链接。');
+    sections.push('No public external reference links are currently available.');
   }
 
   return sections.join('\n');
@@ -1814,94 +1930,16 @@ app.post('/api/research', async (req, res) => {
     return res.status(400).json({ error: 'topic is required' });
   }
 
-  try {
-    const preparedResearch = await retrieveEvidence(topic);
-    const researchMode = preparedResearch.researchMode || deriveResearchMode(topic);
-    const topicProfile = preparedResearch.topicProfile || deriveTopicProfile(topic);
-    const evidenceBundle = preparedResearch;
-    const id = makeId();
-    const stacksPayment = buildStacksPaymentRequest({ jobId: id, amount: PAYMENT_AMOUNT, asset: process.env.STACKS_PAYMENT_ASSET || 'STX' });
-    const clarityPayment = buildClarityPaymentSpec({
-      jobId: id,
-      recipient: stacksPayment.recipient,
-      amount: PAYMENT_AMOUNT,
-      asset: stacksPayment.asset,
-      memo: stacksPayment.memo,
-      contract: stacksPayment.contract,
-      paymentId: stacksPayment.paymentId,
-      expiresAt: stacksPayment.expiresAt,
-      nonce: stacksPayment.nonce
-    });
-    stacksPayment.clarity = clarityPayment;
-    const x402Challenge = buildX402Challenge({ jobId: id, amount: PAYMENT_AMOUNT, asset: stacksPayment.asset, paymentRequest: stacksPayment });
-    const job = {
-      id,
-      topic,
-      searchQuery: evidenceBundle.query,
-      researchMode,
-      topicProfile,
-      paperSource: 'expanded arxiv topic evidence + internal frameworks',
-      papers: evidenceBundle.topicEvidence,
-      paymentEvidence: evidenceBundle.paymentEvidence,
-      status: 'awaiting-payment',
-      createdAt: new Date().toISOString(),
-      orchestration: {
-        manager: 'Manager Molbot',
-        specialists: [...topicProfile.specialistRoles.map((r) => r.agent), 'Image Extractor Molbot'],
-        identities: topicProfile.specialistRoles.map((r) => buildAgentIdentity(r, topicProfile)),
-        meetingStatus: 'scheduled'
-      },
-      paymentRequest: {
-        type: 'x402',
-        asset: stacksPayment.asset,
-        amount: PAYMENT_AMOUNT,
-        recipient: stacksPayment.recipient,
-        payer: stacksPayment.payer,
-        assetType: stacksPayment.assetType,
-        challenge: 'HTTP 402 Payment Required',
-        specialist: 'Image Extractor Molbot',
-        reason: 'Premium synthesis, AI Parliament debate, and extracted assets unlock after payment.',
-        stacks: stacksPayment,
-        clarity: clarityPayment,
-        x402: x402Challenge,
-        verificationPlan: buildClarityVerificationPlan({ ...stacksPayment, clarity: clarityPayment })
-      },
-      extractedAssets: [],
-      report: null
-    };
-
-    job.serviceManifest = buildServiceManifest(job);
-    job.taskTree = buildTaskTree(job, 'quote-issued');
-    job.commerceTrace = buildCommerceTrace(job, 'quote-issued');
-    job.outputs = buildOutputManifest(job);
-
-    seedContractInvoiceState({
-      jobId: id,
-      invoiceStatus: 'created',
-      paymentRequest: job.paymentRequest
-    });
-    job.contractState = await readContractInvoiceState({
-      jobId: id,
-      paymentRequest: job.paymentRequest
-    });
-
-    jobs.set(id, job);
-    logInfo('research.create.success', {
-      requestId: req.requestId,
-      jobId: id,
-      topic,
-      researchMode,
-      evidenceCount: evidenceBundle.topicEvidence?.length || 0,
-    });
-    return res.status(202).json(job);
-  } catch (error) {
-    logError('research.create.failed', {
-      requestId: req.requestId,
-      topic,
-      error,
-    });
-    return res.status(500).json({ error: error.message || 'failed to create job' });
-  }
+  const id = makeId();
+  const job = buildPendingResearchJob(id, topic);
+  jobs.set(id, job);
+  logInfo('research.create.accepted', {
+    requestId: req.requestId,
+    jobId: id,
+    topic,
+  });
+  void prepareResearchJob(job, req.requestId);
+  return res.status(202).json(job);
 });
 
 app.post('/api/jobs/:id/pay', async (req, res) => {

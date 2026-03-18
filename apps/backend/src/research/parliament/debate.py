@@ -22,10 +22,10 @@ class ResearchParliament:
 
         chair = self._call_json(
             "Chair Agent",
-            "研究主席",
+            "Research Chair",
             ParliamentPrompts.CHAIR_SYSTEM_PROMPT,
             {
-                "task": "给出研究 framing、agenda、sourcePriorities、qualityChecks。返回 JSON。",
+                "task": "Return JSON with framing, agenda, sourcePriorities, and qualityChecks.",
                 "topic": topic,
                 "researchMode": research_mode,
                 "topicProfile": topic_profile,
@@ -33,19 +33,19 @@ class ResearchParliament:
                 "evidence": compact_evidence[:16],
             },
             {
-                "framing": f"围绕主题“{topic}”做文献综合，限制过度推断。",
-                "agenda": ["识别主题主线", "检查来源结构", "总结共识与争议", "明确边界与建议"],
-                "sourcePriorities": ["优先关注多源重复出现的主题", "避免只凭少量论文下结论"],
-                "qualityChecks": ["检查来源偏斜", "检查时间窗口与方法局限"],
+                "framing": f"Synthesize the literature around '{topic}' while strictly constraining overclaiming.",
+                "agenda": ["Identify the topic backbone", "Inspect source balance", "Summarize consensus and disagreements", "State boundaries and recommendations"],
+                "sourcePriorities": ["Prioritize themes repeated across independent sources", "Avoid conclusions based on a handful of papers"],
+                "qualityChecks": ["Check source imbalance", "Check time-window and methodological limitations"],
             },
         )
 
         curator = self._call_json(
             "Evidence Curator Agent",
-            "证据策展人",
+            "Evidence Curator",
             ParliamentPrompts.MEMBER_SYSTEM_PROMPTS["curator"],
             {
-                "task": "返回 JSON：clusters, sourceBalance, mustReadRefs, openQuestions。",
+                "task": "Return JSON with clusters, sourceBalance, mustReadRefs, and openQuestions.",
                 "topic": topic,
                 "topicProfile": topic_profile,
                 "overview": overview,
@@ -62,10 +62,10 @@ class ResearchParliament:
 
         analyst = self._call_json(
             "Security Researcher Agent",
-            "主题证据分析员",
+            "Topic Evidence Analyst",
             ParliamentPrompts.MEMBER_SYSTEM_PROMPTS["analyst"],
             {
-                "task": "返回 JSON：thesis, keyPoints, evidencePatterns, caveats。",
+                "task": "Return JSON with thesis, keyPoints, evidencePatterns, and caveats.",
                 "topic": topic,
                 "topicProfile": topic_profile,
                 "overview": overview,
@@ -78,10 +78,10 @@ class ResearchParliament:
 
         skeptic = self._call_json(
             "Audit Skeptic Agent",
-            "审稿型怀疑者",
+            "Review Skeptic",
             ParliamentPrompts.MEMBER_SYSTEM_PROMPTS["skeptic"],
             {
-                "task": "返回 JSON：caution, weakPoints, disagreementPoints。",
+                "task": "Return JSON with caution, weakPoints, and disagreementPoints.",
                 "topic": topic,
                 "topicProfile": topic_profile,
                 "overview": overview,
@@ -90,17 +90,18 @@ class ResearchParliament:
                 "analyst": analyst,
                 "evidence": skeptic_evidence,
             },
-            {"caution": "避免过度推断。", "weakPoints": [], "disagreementPoints": []},
+            {"caution": "Avoid overclaiming.", "weakPoints": [], "disagreementPoints": []},
         )
 
         synthesizer = self._call_json(
             "Synthesis Agent",
-            "最终综合者",
+            "Final Synthesizer",
             ParliamentPrompts.MEMBER_SYSTEM_PROMPTS["synthesizer"],
             {
                 "task": (
-                    "返回 JSON，包含 executiveSummary, keyFindings, implications, limitations, "
-                    "consensus, nextResearchActions。数组字段请返回 4-7 条，并明确来源结构和证据边界。"
+                    "Return JSON with executiveSummary, keyFindings, implications, limitations, "
+                    "consensus, and nextResearchActions. Arrays should contain 4-7 items and make source balance "
+                    "and evidence boundaries explicit."
                 ),
                 "topic": topic,
                 "researchMode": research_mode,
@@ -112,7 +113,7 @@ class ResearchParliament:
                 "skeptic": skeptic,
             },
             {
-                "executiveSummary": f"已围绕 {topic} 完成多源证据综合。",
+                "executiveSummary": f"A multi-source evidence synthesis has been completed for {topic}.",
                 "keyFindings": [],
                 "implications": [],
                 "limitations": [],
@@ -123,7 +124,7 @@ class ResearchParliament:
 
         return {
             "mode": "python-parliament",
-            "executiveSummary": synthesizer.get("executiveSummary") or f"已围绕 {topic} 完成多源证据综合。",
+            "executiveSummary": synthesizer.get("executiveSummary") or f"A multi-source evidence synthesis has been completed for {topic}.",
             "researchQuestion": topic,
             "methodology": (
                 "Python research pipeline over multi-source retrieval (arXiv + OpenReview), "
@@ -144,10 +145,10 @@ class ResearchParliament:
                 "disagreementPoints": skeptic.get("disagreementPoints") or [],
             },
             "parliament": [
-                {"agent": "Chair Agent", "role": "研究主席", "stance": chair.get("framing", "")},
-                {"agent": "Evidence Curator Agent", "role": "证据策展人", "stance": curator.get("sourceBalance", "")},
-                {"agent": "Security Researcher Agent", "role": "主题证据分析员", "stance": analyst.get("thesis", "")},
-                {"agent": "Audit Skeptic Agent", "role": "审稿型怀疑者", "stance": skeptic.get("caution", "")},
+                {"agent": "Chair Agent", "role": "Research Chair", "stance": chair.get("framing", "")},
+                {"agent": "Evidence Curator Agent", "role": "Evidence Curator", "stance": curator.get("sourceBalance", "")},
+                {"agent": "Security Researcher Agent", "role": "Topic Evidence Analyst", "stance": analyst.get("thesis", "")},
+                {"agent": "Audit Skeptic Agent", "role": "Review Skeptic", "stance": skeptic.get("caution", "")},
             ],
         }
 
@@ -192,7 +193,7 @@ class ResearchParliament:
 
     def _call_json(self, agent_name: str, role: str, system_prompt: str, payload: dict, fallback: dict) -> dict:
         messages = [
-            {"role": "system", "content": system_prompt + " 严格输出 JSON。"},
+            {"role": "system", "content": system_prompt + " Return strict JSON only."},
             {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
         ]
         try:
