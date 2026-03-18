@@ -33,6 +33,32 @@ This maps directly to the hackathon prompt: molbots interacting with each other,
 6. The backend verifies the transaction plus x402 authorization payload.
 7. The paid specialist bundle is released and the final deliverables are packaged.
 
+## Hackathon Highlights (From Live Screens)
+
+These highlights summarize what judges can immediately verify in the product UI:
+
+1. **Production-style research commerce interface**
+  - A complete end-to-end workspace for task intake, quote visibility, wallet settlement, and output delivery.
+  - The UI clearly frames AutoScholar as a paid specialist service, not a static report page.
+
+2. **On-chain settlement visibility in the experience**
+  - The dashboard surfaces settlement readiness, active wallet status, and payment lifecycle state.
+  - This makes x402 + Stacks behavior understandable to both technical and non-technical judges.
+
+3. **Economic clarity for the agent service bundle**
+  - The bundle card exposes quote amount (0.5 STX), specialist bundle size, deliverable count, and current status.
+  - The value proposition is explicit before and after payment.
+
+4. **Transparent research quality boundaries**
+  - The final report does not hallucinate certainty when evidence quality is weak.
+  - It explicitly reports evidence scope, source balance, and conclusion boundaries, which strengthens trust.
+
+### Screenshot Gallery
+
+![AutoScholar workspace, settlement status, and bundle snapshot](figures/demo2.png)
+
+![AutoScholar generated report showing evidence-boundary transparency](figures/demo1.png)
+
 ## Product Surface
 
 ### Human-facing
@@ -67,10 +93,6 @@ After a verified payment, AutoScholar packages:
   - format: `json`
   - audience: `agent`
   - contents: structured evidence shortlist and extracted assets
-- `Citation Ledger`
-  - format: `json`
-  - audience: `agent`
-  - contents: normalized citations and payment references
 - `Agent Handoff Packet`
   - format: `json`
   - audience: `agent`
