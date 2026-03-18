@@ -335,10 +335,12 @@ export default function App() {
     if (!(backendWorkflowPending || job.status === 'preparing' || (job.status === 'processing' && !job.report))) return undefined;
 
     let cancelled = false;
+    let failedPollCount = 0;
     const timer = window.setInterval(async () => {
       try {
         const latest = await request(`/api/jobs/${job.id}`);
         if (cancelled) return;
+        failedPollCount = 0;
         setJob(latest);
         if (latest?.status === 'failed' && latest?.error) {
           setError(latest.error);
@@ -346,8 +348,24 @@ export default function App() {
         if (latest?.report || latest?.status === 'failed') {
           setBackendWorkflowPending(false);
         }
-      } catch {
-        // Keep the optimistic processing UI even if a background poll fails.
+      } catch (pollError) {
+        if (cancelled) return;
+        if (pollError?.status === 404) {
+          const message = 'Job state was lost after backend restart. Please create a new task.';
+          setBackendWorkflowPending(false);
+          setError(message);
+          setJob((current) => (current ? { ...current, status: 'failed', error: message } : current));
+          pushExecutionEvent(message, 'error');
+          return;
+        }
+
+        failedPollCount += 1;
+        if (failedPollCount >= 3) {
+          const message = 'Background polling failed repeatedly. Please refresh the job or create a new task.';
+          setBackendWorkflowPending(false);
+          setError(message);
+          pushExecutionEvent(message, 'warn');
+        }
       }
     }, 5000);
 
@@ -844,7 +862,7 @@ export default function App() {
             <div className="quoteAmount">{displayAmount}</div>
             <div className="quoteMeta">
               <span>Job: {job?.id ? shortAddress(job.id) : 'No active job yet'}</span>
-              <span>Bundle: {serviceBundleCount || 4} paid specialist services</span>
+              <span>Bundle: {serviceBundleCount || 3} paid specialist services</span>
               <span>Outputs: {outputCount || 3} deliverables</span>
               <span>Status: {job?.status ? String(job.status).replaceAll('_', ' ') : 'idle'}</span>
             </div>

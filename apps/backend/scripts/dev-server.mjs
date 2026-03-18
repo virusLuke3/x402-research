@@ -31,6 +31,16 @@ let restartTimer = null;
 let isStopping = false;
 let isRestarting = false;
 
+function shouldIgnoreWatchEvent(filename = '') {
+  const normalized = String(filename || '').replace(/\\/g, '/');
+  return (
+    normalized.includes('/__pycache__/')
+    || normalized.endsWith('.pyc')
+    || normalized.endsWith('.pyo')
+    || normalized.endsWith('.log')
+  );
+}
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -142,18 +152,17 @@ function scheduleRestart(reason) {
   if (isStopping) return;
   clearTimeout(restartTimer);
   restartTimer = setTimeout(async () => {
+    if (isRestarting) return;
     console.log(`Restarting backend (${reason})...`);
     isRestarting = true;
     await stopChild();
-    if (!isRestarting) {
-      spawnServer();
-    }
   }, 120);
 }
 
 function watchTarget(target) {
   if (!fs.existsSync(target)) return null;
   return fs.watch(target, { recursive: fs.statSync(target).isDirectory() }, (_eventType, filename) => {
+    if (shouldIgnoreWatchEvent(filename)) return;
     scheduleRestart(filename ? `${path.basename(target)}:${filename}` : path.basename(target));
   });
 }

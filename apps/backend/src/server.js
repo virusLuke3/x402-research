@@ -658,16 +658,6 @@ function buildServiceManifest(job) {
       description: 'Machine-readable evidence shortlist for downstream molbots.'
     },
     {
-      id: 'citation-ledger',
-      title: 'Citation Ledger',
-      format: 'json',
-      audience: 'agent',
-      status,
-      price: displayAmount,
-      settlement: 'bundled-under-parent-invoice',
-      description: 'Structured citation and payment-rail reference bundle.'
-    },
-    {
       id: 'agent-handoff',
       title: 'Agent Handoff Packet',
       format: 'json',
@@ -805,20 +795,6 @@ function buildTaskTree(job, stage = 'quote-issued', llmResult = null, extractedA
   nodes.push(
     ...specialistNodes,
     {
-      id: 'citation-auditor',
-      parentId: 'x402-gateway',
-      depth: 2,
-      label: 'Citation Auditor',
-      agent: 'Citation Auditor Molbot',
-      role: 'Normalize references into an agent-consumable citation ledger.',
-      status: statuses.specialist,
-      pricing: nextQuote(),
-      unlockCondition: 'released after parent invoice payment',
-      resultSummary: llmResult
-        ? `${safeArray(job?.report?.citations, []).length || safeArray(job?.papers, []).length} citations prepared for downstream agents.`
-        : 'Will produce a machine-readable citation ledger after payment.'
-    },
-    {
       id: 'figure-extractor',
       parentId: 'x402-gateway',
       depth: 2,
@@ -862,7 +838,7 @@ function buildTaskTree(job, stage = 'quote-issued', llmResult = null, extractedA
     stage,
     summary: {
       totalNodes: nodes.length,
-      specialistNodes: specialistNodes.length + 3,
+      specialistNodes: specialistNodes.length + 2,
       paidNodes: nodes.filter((node) => node.pricing?.amount && Number(node.pricing.amount) > 0).length,
       statusCounts
     },
@@ -922,7 +898,7 @@ function buildCommerceTrace(job, stage = 'quote-issued', llmResult = null, extra
       {
         id: 'trace-release',
         title: 'Paid specialist capabilities released',
-        detail: `Unlocked ${safeArray(job?.topicProfile?.specialistRoles, []).length + 3} paid subtasks under the parent invoice.`,
+        detail: `Unlocked ${safeArray(job?.topicProfile?.specialistRoles, []).length + 2} paid subtasks under the parent invoice.`,
         actor: 'Manager Molbot',
         category: 'execution',
         status: stage === 'processing' ? 'processing' : 'completed',
@@ -1021,11 +997,6 @@ function buildOutputManifest(job, evidenceBundle = null, report = null, taskTree
     extractedAssets: report.extractedAssets
   };
 
-  const citationLedger = {
-    citations: report.citations,
-    paymentCitations: report.paymentCitations
-  };
-
   const agentHandoff = {
     topic: job.topic,
     payment: {
@@ -1085,15 +1056,6 @@ function buildOutputManifest(job, evidenceBundle = null, report = null, taskTree
         status: 'ready',
         description: 'Evidence shortlist and premium asset inventory.',
         payload: evidencePack
-      },
-      {
-        id: 'citation-ledger',
-        title: 'Citation Ledger',
-        format: 'json',
-        audience: 'agent',
-        status: 'ready',
-        description: 'Structured citations ready for downstream use.',
-        payload: citationLedger
       },
       {
         id: 'agent-handoff',
@@ -1528,7 +1490,7 @@ async function callResearchBridge(action, payload) {
     let stdout = '';
     let stderr = '';
     let settled = false;
-    const timeoutMs = Number(process.env.RESEARCH_TIMEOUT_MS || 300000);
+    const timeoutMs = Number(process.env.RESEARCH_TIMEOUT_MS || 180000);
 
     const timer = setTimeout(() => {
       if (settled) return;

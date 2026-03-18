@@ -16,7 +16,8 @@ class ResearchConfig:
     arxiv_max_results: int = 80
     openreview_max_results: int = 80
     evidence_limit: int = 48
-    minimum_paper_count: int = 40
+    minimum_paper_count: int = 15
+    crawler_timeout_schedule_seconds: tuple[int, ...] = (20, 12, 8)
     report_citation_limit: int = 20
     download_dir: str = "./tmp/research-downloads"
 
@@ -33,7 +34,13 @@ class ResearchConfig:
             arxiv_max_results=int(os.getenv("ARXIV_MAX_RESULTS", "80")),
             openreview_max_results=int(os.getenv("OPENREVIEW_MAX_RESULTS", "80")),
             evidence_limit=int(os.getenv("EVIDENCE_LIMIT", "48")),
-            minimum_paper_count=int(os.getenv("MINIMUM_PAPER_COUNT", "40")),
+            minimum_paper_count=int(os.getenv("MINIMUM_PAPER_COUNT", "15")),
+            crawler_timeout_schedule_seconds=tuple(
+                max(1, int(item.strip()))
+                for item in os.getenv("CRAWLER_TIMEOUT_SCHEDULE_SECONDS", "20,12,8").split(",")
+                if item.strip()
+            )
+            or (20, 12, 8),
             report_citation_limit=int(os.getenv("REPORT_CITATION_LIMIT", "20")),
             download_dir=os.getenv("RESEARCH_DOWNLOAD_DIR", "./tmp/research-downloads"),
         )

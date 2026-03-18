@@ -249,20 +249,27 @@ def retrieve_evidence(topic: str, research_mode: str | None = None, topic_profil
     research_mode = research_mode or derive_research_mode(topic)
     topic_profile = topic_profile or derive_topic_profile(topic)
     queries = build_query_variants(topic, research_mode, topic_profile)
-
-    crawlers = [
-        ArxivCrawler(max_results=config.arxiv_max_results),
-        OpenReviewCrawler(max_results=config.openreview_max_results),
-    ]
     external = []
-    for query in queries:
+    timeout_schedule = list(config.crawler_timeout_schedule_seconds or (20, 12, 8))
+
+    for query_index, query in enumerate(queries):
+        timeout_seconds = timeout_schedule[min(query_index, len(timeout_schedule) - 1)]
+        crawlers = [
+            ArxivCrawler(max_results=config.arxiv_max_results, timeout_seconds=timeout_seconds),
+            OpenReviewCrawler(max_results=config.openreview_max_results, timeout_seconds=timeout_seconds),
+        ]
         for crawler in crawlers:
             try:
                 external.extend(crawler.fetch_papers(query))
             except Exception:
                 continue
 
-    external = dedupe_papers(external)
+        # Deduplicate after each query round and stop early once enough paper evidence is available.
+        external = dedupe_papers(external)
+        paper_count = sum(1 for item in external if item.get("sourceType") in {"arxiv", "openreview"})
+        if paper_count >= config.minimum_paper_count:
+            break
+
     scored_external = []
     for index, item in enumerate(external):
         enriched = dict(item)

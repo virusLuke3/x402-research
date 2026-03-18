@@ -8,9 +8,10 @@ from research.core.config import ResearchConfig
 
 
 class OpenReviewCrawler:
-    def __init__(self, max_results: int | None = None):
+    def __init__(self, max_results: int | None = None, timeout_seconds: int = 60):
         config = ResearchConfig.load()
         self.max_results = max_results or config.openreview_max_results
+        self.timeout_seconds = max(1, int(timeout_seconds))
 
     def fetch_papers(self, query: str) -> list[dict]:
         params = {
@@ -19,7 +20,7 @@ class OpenReviewCrawler:
         }
         url = "https://api2.openreview.net/notes/search?" + parse.urlencode(params)
         req = request.Request(url, headers={"User-Agent": "AutoScholar/0.8 research-pipeline"})
-        with request.urlopen(req, timeout=60) as resp:
+        with request.urlopen(req, timeout=self.timeout_seconds) as resp:
             payload = json.loads(resp.read().decode("utf-8"))
 
         papers = []
