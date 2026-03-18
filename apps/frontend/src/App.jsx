@@ -918,14 +918,21 @@ export default function App() {
                 placeholder="Describe the research task you want this molbot network to investigate. Final report output will be in English..."
               />
               <p className="inputHelper">You can enter any topic you want to learn about. We keep the final dossier in English even if the prompt itself is mixed-language.</p>
+              {!walletReady && (
+                <p className="notice noticeWarn">Connect your wallet to unlock task creation.</p>
+              )}
               <div className="formActionRow">
-                <button className="primaryButton" disabled={loading}>
-                  {loading && !canPay ? 'Scoping...' : 'Create Molbot Task'}
+                <button
+                  className="primaryButton"
+                  disabled={loading || !walletReady}
+                  title={!walletReady ? 'Connect wallet to unlock task creation' : undefined}
+                >
+                  {loading && !canPay ? 'Tasking...' : 'Create Molbot Task'}
                 </button>
                 <button
                   type="button"
                   className="secondaryButton"
-                  onClick={() => setTopic('Design a molbot-to-molbot commerce protocol on Stacks using x402, with research outputs packaged for downstream agents.')}
+                  onClick={() => setTopic('Give me a research topic about solidity')}
                 >
                   Load Demo Prompt
                 </button>
@@ -1011,9 +1018,17 @@ export default function App() {
               type="button"
               className="primaryButton primaryButtonWide"
               onClick={walletReady ? payAndComplete : handleConnectWallet}
-              disabled={loading || !job || (walletReady && !paymentReadyToSign)}
+              disabled={loading || !job || (walletReady && !paymentReadyToSign) || (job && job.status !== 'awaiting-payment')}
             >
-              {canPay ? unlockLabel : 'Create a molbot task before payment'}
+              {!job
+                ? 'Create a task before payment'
+                : job.status === 'preparing' || job.status === 'processing' || backendWorkflowPending
+                  ? 'Tasking...'
+                  : canPay
+                    ? `Unlock and Pay ${displayAmount}`
+                    : job.status === 'completed' || job.status === 'completed_with_fallback'
+                      ? 'Task Completed'
+                      : 'Create a task before payment'}
             </button>
 
             <div className="gatewayNotes">
